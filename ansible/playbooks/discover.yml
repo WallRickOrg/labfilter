@@ -1,0 +1,76 @@
+---
+- name: Capture a redacted OpenWrt configuration snapshot
+  hosts: openwrt
+  gather_facts: false
+  vars_files:
+    - ../vars/openwrt.yml
+  tasks:
+    - name: Verify the native OpenWrt management commands exist
+      ansible.builtin.raw: "test -x /sbin/uci && test -x /sbin/ip && command -v ubus >/dev/null"
+      changed_when: false
+
+    - name: Read and redact the UCI export without logging its contents
+      ansible.builtin.raw: >-
+        /sbin/uci export |
+        sed -E "s/((option|list)[[:space:]]+(password|passwd|key|secret|token|psk|passphrase|private_key|identity|auth_secret|hostname|ssid|macaddr)[[:space:]]+)'[^']*'/\1'<redacted>'/g"
+      register: openwrt_uci_export
+      changed_when: false
+      no_log: true
+
+    - name: Read platform information without logging raw command output
+      ansible.builtin.raw: "cat /etc/openwrt_release; ubus call system board"
+      register: openwrt_platform
+      changed_when: false
+      no_log: true
+
+    - name: Read interface and route state without logging raw command output
+      ansible.builtin.raw: "/sbin/ip -br address; printf '\n--- routes ---\n'; /sbin/ip route; printf '\n--- links ---\n'; /sbin/ip -br link"
+      register: openwrt_network
+      changed_when: false
+      no_log: true
+
+    - name: Read enabled service state without logging raw command output
+      ansible.builtin.raw: "for service in /etc/init.d/*; do [ -x \"$service\" ] && \"$service\" enabled && basename \"$service\"; done"
+      register: openwrt_services
+      changed_when: false
+      no_log: true
+
+    - name: Create the ignored local discovery directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../../artifacts/discovery"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Write the redacted UCI export locally
+      ansible.builtin.copy:
+        content: "{{ openwrt_uci_export.stdout }}"
+        dest: "{{ playbook_dir }}/../../artifacts/discovery/uci-export.conf"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Write the platform report locally
+      ansible.builtin.copy:
+        content: "{{ openwrt_platform.stdout }}"
+        dest: "{{ playbook_dir }}/../../artifacts/discovery/platform.txt"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Write the network report locally
+      ansible.builtin.copy:
+        content: "{{ openwrt_network.stdout }}"
+        dest: "{{ playbook_dir }}/../../artifacts/discovery/network.txt"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Write the enabled-service report locally
+      ansible.builtin.copy:
+        content: "{{ openwrt_services.stdout }}"
+        dest: "{{ playbook_dir }}/../../artifacts/discovery/services.txt"
+        mode: "0600"
+      delegate_to: localhost
+      become: false

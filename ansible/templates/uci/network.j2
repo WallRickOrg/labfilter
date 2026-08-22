@@ -1,0 +1,39 @@
+# Reproduces the verified bridge, upstream, and management interface topology.
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config globals 'globals'
+	option ula_prefix '{{ openwrt_ula_prefix }}'
+	option packet_steering '1'
+
+config interface 'lanwifi'
+	option proto 'dhcp'
+
+config interface 'lan'
+	option proto 'none'
+	option device 'br-lan'
+
+config interface 'wan'
+	option proto 'static'
+	option ipaddr '{{ openwrt_wan_ip }}'
+	option netmask '255.255.255.0'
+	option ip6assign '60'
+
+config device
+	option name 'br-lan'
+	option type 'bridge'
+	list ports 'eth1'
+	list ports 'eth2'
+
+config switch
+	option name 'switch0'
+	option reset '0'
+	option enable_vlan '0'
+
+config interface 'management'
+	option proto 'dhcp'
+	option device 'eth0'
+	option hostname '{{ openwrt_device_hostname }}'

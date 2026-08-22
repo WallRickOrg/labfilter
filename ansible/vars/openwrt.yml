@@ -1,0 +1,38 @@
+---
+# Populate these lists only from a verified live discovery report.
+# Each UCI set item is passed as one quoted argument to `uci set`, for example:
+#   - network.lan.proto=static
+# Keep passwords, Wi-Fi keys, tokens, and private material in an ignored local vars file.
+openwrt_uci_set: []
+openwrt_uci_delete: []
+openwrt_uci_add_list: []
+openwrt_uci_commit: []
+openwrt_services_reload: []
+
+# These are the verified live UCI packages, rendered locally and uploaded with raw SSH.
+openwrt_config_templates:
+  - dhcp
+  - dropbear
+  - firewall
+  - luci
+  - network
+  - rpcd
+  - system
+  - ttyd
+  - uhttpd
+  - wireless
+
+# Machine-specific values come from the ignored .env through the wrapper.
+openwrt_management_address: "{{ lookup('env', 'OPENWRT_MANAGEMENT_ADDRESS') }}"
+openwrt_management_interface: "{{ lookup('env', 'OPENWRT_MANAGEMENT_INTERFACE') }}"
+openwrt_device_hostname: "{{ lookup('env', 'OPENWRT_DEVICE_HOSTNAME') }}"
+openwrt_ula_prefix: "{{ lookup('env', 'OPENWRT_ULA_PREFIX') }}"
+openwrt_wan_ip: "{{ lookup('env', 'OPENWRT_WAN_IP') }}"
+openwrt_management_cidr: "{{ lookup('env', 'OPENWRT_MANAGEMENT_CIDR') }}"
+openwrt_upstream_cidr: "{{ lookup('env', 'OPENWRT_UPSTREAM_CIDR') }}"
+openwrt_upstream_address: "{{ lookup('env', 'OPENWRT_UPSTREAM_ADDRESS') }}"
+openwrt_lanwifi_ssid: "{{ lookup('env', 'OPENWRT_LANWIFI_SSID') }}"
+openwrt_lanwifi_psk: "{{ lookup('env', 'OPENWRT_LANWIFI_PSK_BASE64') | b64decode }}"
+openwrt_rpcd_password: "{{ lookup('env', 'OPENWRT_RPCD_PASSWORD_BASE64') | b64decode }}"
+openwrt_block_rule_name: "{{ lookup('env', 'OPENWRT_BLOCK_RULE_NAME') }}"
+openwrt_block_cnn_ip: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IP') }}"

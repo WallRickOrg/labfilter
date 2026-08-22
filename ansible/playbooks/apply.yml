@@ -1,0 +1,128 @@
+---
+- name: Apply guarded OpenWrt configuration
+  hosts: openwrt
+  gather_facts: false
+  vars_files:
+    - ../vars/openwrt.yml
+  pre_tasks:
+    - name: Require explicit confirmation before applying any change
+      ansible.builtin.assert:
+        that:
+          - openwrt_apply_confirmed | bool
+          - openwrt_allow_local_access | bool
+        fail_msg: >-
+          Refusing to apply: set both openwrt_apply_confirmed=true and
+          openwrt_allow_local_access=true after reviewing the change.
+
+    - name: Refuse unguarded network or firewall changes
+      ansible.builtin.assert:
+        that:
+          - openwrt_allow_network_changes | bool
+          - openwrt_management_address | length > 0
+          - openwrt_management_interface | length > 0
+        fail_msg: >-
+          Network/firewall changes require openwrt_allow_network_changes=true,
+          openwrt_management_address, and openwrt_management_interface.
+      when: >-
+        ('network' in openwrt_config_templates)
+        or ('firewall' in openwrt_config_templates)
+        or (openwrt_uci_set | select('match', '^(network|firewall)\.') | list | length > 0)
+        or (openwrt_uci_delete | select('match', '^(network|firewall)\.') | list | length > 0)
+        or (openwrt_uci_add_list | select('match', '^(network|firewall)\.') | list | length > 0)
+
+    - name: Require the local management address guard for protected templates
+      ansible.builtin.assert:
+        that:
+          - openwrt_management_address | length > 0
+          - openwrt_management_interface | length > 0
+        fail_msg: >-
+          The live network/firewall templates require OPENWRT_MANAGEMENT_ADDRESS
+          and OPENWRT_MANAGEMENT_INTERFACE in the ignored .env.
+      when: >-
+        ('network' in openwrt_config_templates)
+        or ('firewall' in openwrt_config_templates)
+
+    - name: Confirm current local management access before protected changes
+      ansible.builtin.raw: >-
+        /sbin/ip -4 addr show dev {{ openwrt_management_interface | quote }} |
+        grep -F -- {{ openwrt_management_address | quote }}
+      changed_when: false
+      when: >-
+        ('network' in openwrt_config_templates)
+        or ('firewall' in openwrt_config_templates)
+
+    - name: Require externalized values needed by the reproduced templates
+      ansible.builtin.assert:
+        that:
+          - openwrt_device_hostname | length > 0
+          - openwrt_ula_prefix | length > 0
+          - openwrt_wan_ip | length > 0
+          - openwrt_management_cidr | length > 0
+          - openwrt_upstream_cidr | length > 0
+          - openwrt_upstream_address | length > 0
+          - openwrt_lanwifi_ssid | length > 0
+          - openwrt_lanwifi_psk | length > 0
+          - openwrt_rpcd_password | length > 0
+          - openwrt_block_rule_name | length > 0
+          - openwrt_block_cnn_ip | length > 0
+        fail_msg: >-
+          One or more required host-specific or secret template values are
+          missing from the ignored .env.
+      when: openwrt_config_templates | length > 0
+
+    - name: Verify UCI is available before changing state
+      ansible.builtin.raw: "test -x /sbin/uci"
+      changed_when: false
+
+    - name: Save a remote backup before applying configuration
+      ansible.builtin.raw: >-
+        backup="/tmp/openwrt-ansible-backup-$(date +%Y%m%d%H%M%S).tar.gz";
+        tar -czf "$backup" /etc/config;
+        printf '%s' "$backup"
+      register: openwrt_backup
+      changed_when: true
+      no_log: true
+
+  tasks:
+    - name: Render and upload verified UCI configuration templates
+      ansible.builtin.raw: >-
+        printf '%s' {{ lookup('template', playbook_dir + '/../templates/uci/' + item + '.j2') | b64encode | quote }} |
+        base64 -d > /etc/config/{{ item | quote }}
+      loop: "{{ openwrt_config_templates }}"
+      when: openwrt_config_templates | length > 0
+      no_log: true
+
+    - name: Set verified UCI values
+      ansible.builtin.raw: "/sbin/uci set {{ item | quote }}"
+      loop: "{{ openwrt_uci_set }}"
+      when: openwrt_uci_set | length > 0
+
+    - name: Delete verified UCI values
+      ansible.builtin.raw: "/sbin/uci delete {{ item | quote }}"
+      loop: "{{ openwrt_uci_delete }}"
+      when: openwrt_uci_delete | length > 0
+
+    - name: Add verified UCI list values
+      ansible.builtin.raw: "/sbin/uci add_list {{ item | quote }}"
+      loop: "{{ openwrt_uci_add_list }}"
+      when: openwrt_uci_add_list | length > 0
+
+    - name: Commit only the explicitly listed UCI configuration files
+      ansible.builtin.raw: "/sbin/uci commit {{ item | quote }}"
+      loop: "{{ openwrt_uci_commit }}"
+      when: openwrt_uci_commit | length > 0
+
+    - name: Reload only the explicitly listed services
+      ansible.builtin.raw: "/etc/init.d/{{ item | quote }} reload"
+      loop: "{{ openwrt_services_reload }}"
+      when: openwrt_services_reload | length > 0
+
+    - name: Confirm the management address remains present after changes
+      ansible.builtin.raw: >-
+        /sbin/ip -4 addr show dev {{ openwrt_management_interface | quote }} |
+        grep -F -- {{ openwrt_management_address | quote }}
+      changed_when: false
+      when:
+        - openwrt_allow_network_changes | bool
+        - openwrt_management_address | length > 0
+        - openwrt_management_interface | length > 0

@@ -1,0 +1,10 @@
+# Reproduces rpcd access while sourcing the password hash only from ignored runtime data.
+config rpcd
+	option socket '/var/run/ubus/ubus.sock'
+	option timeout '30'
+
+config login
+	option username 'root'
+	option password '{{ openwrt_rpcd_password }}'
+	list read '*'
+	list write '*'
