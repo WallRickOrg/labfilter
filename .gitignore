@@ -1,0 +1,21 @@
+# Keep credentials and machine-specific connection settings out of Git.
+.env
+.env.*
+!.env.example
+
+# Keep generated discovery exports and router backups local because they can contain secrets.
+artifacts/
+backups/
+
+# Keep local Ansible inventory and variable overrides private.
+ansible/inventory/hosts.local.yml
+ansible/group_vars/*.local.yml
+ansible/host_vars/*.local.yml
+ansible/vars/*.local.yml
+ansible/templates/uci/*.local.j2
+
+# Keep private keys, temporary logs, and Ansible runtime files out of Git.
+*.pem
+*.key
+*.retry
+ansible.log

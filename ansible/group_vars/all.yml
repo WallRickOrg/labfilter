@@ -1,0 +1,16 @@
+---
+# These empty lists make an undiscovered configuration a safe no-op.
+openwrt_uci_set: []
+openwrt_uci_delete: []
+openwrt_uci_add_list: []
+openwrt_uci_commit: []
+openwrt_services_reload: []
+
+# Applying changes is opt-in so an incomplete local checkout cannot alter the bridge.
+openwrt_apply_confirmed: false
+openwrt_allow_local_access: false
+
+# Network and firewall changes require a separate explicit guard.
+openwrt_allow_network_changes: false
+openwrt_management_address: ""
+openwrt_management_interface: ""
