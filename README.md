@@ -67,6 +67,7 @@ the repository.
 
 ## Repository layout
 
+- `ARCHITECTURE.md`: verified topology, intended security policy, and acceptance tests.
 - `ansible/playbooks/discover.yml`: read-only live-state capture with redaction.
 - `ansible/playbooks/apply.yml`: guarded UCI and service application.
 - `ansible/templates/uci/`: current non-secret UCI package templates.
