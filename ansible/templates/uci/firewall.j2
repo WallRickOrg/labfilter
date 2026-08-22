@@ -1,9 +1,19 @@
 # Reproduces the verified zones, forwarding, and explicitly configured rules.
 config defaults
+	# Keep firewall4's standard nftables.d support enabled for OpenWrt packages.
+	option auto_includes '1'
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
 	option synflood_protect '1'
+
+# Register the bridge policy through firewall4's supported script include.
+# LuCI exposes this managed file at Network → Firewall → Custom Rules.
+config include 'openwrt_bridge_filter'
+	option enabled '1'
+	option type 'script'
+	option path '/etc/firewall.user'
+	option reload '1'
 
 config zone
 	option name 'lan'
@@ -12,6 +22,10 @@ config zone
 	option forward 'ACCEPT'
 	list network 'lan'
 	list network 'management'
+	# Keep both discovered wireless DHCP networks inside the locally managed
+	# LAN zone so the repaired station retains local administrative access.
+	list network 'openwrtwifi'
+	list network '{{ openwrt_wifi_network_name }}'
 
 config zone
 	option name 'wan'
@@ -26,14 +40,6 @@ config zone
 config forwarding
 	option src 'lan'
 	option dest 'wan'
-
-config rule
-	option name '{{ openwrt_block_rule_name }}'
-	option dest 'wan'
-	list dest_ip '{{ openwrt_block_cnn_ip }}'
-	option target 'REJECT'
-	option src 'lan'
-	list proto 'all'
 
 config rule
 	option name 'Allow-DHCP-Renew'
@@ -133,7 +139,6 @@ config zone
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
-	list network 'lanwifi'
 
 config rule
 	option name 'ssh'

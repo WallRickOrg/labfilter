@@ -1,0 +1,42 @@
+'use strict';
+'require view';
+'require fs';
+'require ui';
+
+// This page intentionally edits firewall4's script include. It is a bridge
+// policy editor rather than a routed Traffic Rules form, since transparent
+// bridge frames do not enter fw4's inet chains.
+return view.extend({
+	load: function() {
+		return L.resolveDefault(fs.read('/etc/firewall.user'), '');
+	},
+
+	handleSave: function() {
+		var value = (document.querySelector('textarea').value || '')
+			.trim().replace(/\r\n/g, '\n') + '\n';
+
+		// Saving applies the edited script immediately. The confirmation text
+		// keeps Ansible reconciliation explicit for future managed applies.
+		return fs.write('/etc/firewall.user', value).then(function() {
+			document.querySelector('textarea').value = value;
+			ui.addNotification(null, E('p',
+				_('Rules saved and firewall restarted. Copy this change into Ansible before its next apply.')), 'info');
+			return fs.exec('/etc/init.d/firewall', [ 'restart' ]);
+		}).catch(function(e) {
+			ui.addNotification(null, E('p',
+				_('Unable to save bridge nftables rules: %s').format(e.message)));
+		});
+	},
+
+	handleSaveApply: null,
+	handleReset: null,
+
+	render: function(rules) {
+		return E([
+			E('h2', _('Bridge nftables Rules')),
+			E('p', {}, _('These rules filter transparent bridge traffic at the nftables bridge hook. They are not routed Traffic Rules.')),
+			E('p', {}, _('Saving restarts the firewall. Keep local management access available and synchronize every UI change to Ansible before its next managed apply.')),
+			E('textarea', { 'style': 'width:100%', 'rows': 25 }, [ rules != null ? rules : '' ])
+		]);
+	}
+});

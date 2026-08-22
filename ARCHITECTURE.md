@@ -27,12 +27,18 @@ corrected. The following facts were confirmed:
 - `eth0` is the `management` interface and obtains its address through DHCP.
 - `eth1` and `eth2` are ports of `br-lan`; the `lan` interface has no L3 address
   and is configured as a bridge-facing interface.
-- `phy0-sta0` is the wireless station interface and belongs to `lanwifi`, which
+- `phy0-sta0` is the wireless station interface and belongs to the configured
+  wireless DHCP network, which
   obtains its address through DHCP.
 - The default route leaves through `eth0`; the wireless station has a separate
   upstream route.
 - The live firewall has a `lan` zone with ACCEPT input, output, and forwarding,
-  and a `lanwifi` zone with ACCEPT input, output, and forwarding.
+  and a legacy wireless zone with ACCEPT input, output, and forwarding.
+
+The wireless station configuration is rendered from the ignored SSID and
+base64-encoded PSK values. A guarded wireless apply uses OpenWrt's normal
+wireless reload and requires association plus DHCP before succeeding;
+wired management remains the independent recovery path.
 - Dropbear currently listens on TCP port 22. LuCI's HTTP services listen on
   TCP ports 80 and 443.
 - A custom firewall rule is named `ssh` but currently targets TCP port 21 and
@@ -54,7 +60,7 @@ corrected. The following facts were confirmed:
   application must verify the current management address before a protected
   change and verify it remains present afterward.
 
-### Wireless DMZ plane: `phy0-sta0` / `lanwifi`
+### Wireless DMZ plane: `phy0-sta0`
 
 - The wireless station is an untrusted DMZ-side ingress, not a trusted LAN.
 - Only TCP ports 21, 80, and 443 may be accepted to the OpenWrt device from the
@@ -81,24 +87,74 @@ corrected. The following facts were confirmed:
   filtered. Enforcing the untrusted policy requires either a routed design or
   an intentionally verified bridge/netfilter policy.
 
+### Bridge filtering implementation
+
+The reproducible implementation registers an Ansible-managed firewall4 script
+include and renders it to `/etc/firewall.user`, LuCI's Custom Rules file. The
+script defines a separate `bridge`-family table with a `forward` hook, matching
+ingress on the physical bridge ports and dropping destinations in CNN IPv4 and
+IPv6 sets resolved from tracked hostnames during the apply. This is intentionally
+separate from the routed `inet fw4` zones and does not require `br_netfilter` or
+bridge sysctl changes.
+
+The required `kmod-nft-bridge` kernel package is part of the tracked Ansible
+desired state. Because the management interface cannot reach OpenWrt feeds,
+the exact kernel-matched package URL and checksum are pinned for controller-side
+download, verified transfer, and local `opkg` installation.
+
+A guarded firewall-only apply installed the package and loaded the bridge
+table without reloading the network. A direct CNN HTTPS request timed out while
+a control HTTPS request succeeded, and the IPv4 drop counter increased. The
+legacy routed UCI rule was removed because its LuCI visibility incorrectly
+suggested that it governed transparent traffic.
+
+LuCI's standard Traffic Rules editor manages routed `inet fw4` policy, not
+bridge hooks. The policy is therefore registered as a native firewall4 script
+include and rendered into LuCI's **Network → Firewall → Custom Rules** file,
+where its actual nftables commands are visible. Representing the policy as a
+routed Traffic Rule would still be misleading because that packet path bypasses
+the rule.
+
+The fw4-only LuCI package installed on this device hides its stock Custom Rules
+menu behind an obsolete fw3 dependency. Ansible installs a separate **Network →
+Bridge nftables Rules** menu entry that opens an editor for the same script.
+The user explicitly permits edits through this page; each edit restarts the
+firewall and must be copied back into the Ansible template before another
+managed apply, which otherwise replaces the script.
+LuCI caches menu definitions under `/tmp`; the Ansible UI deployment removes
+only that transient cache so the new route appears without a reboot.
+
+The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
+nftables cannot match hostnames directly, so the controller resolves A and AAAA
+answers during every guarded apply and renders that single snapshot into the
+bridge sets. No CNN values are stored in `.env`. Encrypted DNS does not bypass
+an address already in the sets, but alternate hostnames and DNS changes after
+an apply require another guarded apply.
+
+The Proxmox test exception is a static TCP 8006 accept at the bridge-family
+forwarding hook. It deliberately contains no private backend address or `.env`
+configuration. OpenWrt does not DNAT this traffic and does not install a host
+route for it; both would incorrectly treat a transparent Layer 2 path as routed
+traffic.
+
 ## Current gaps requiring explicit resolution
 
-The live state does not yet implement the stated intent:
+The bridge filter is active, but the broader live state still has these gaps:
 
-1. The current `lan` and `lanwifi` zones accept all input, output, and forwarding.
+1. The current `lan` and legacy wireless zones accept all input, output, and forwarding.
 2. The current named `ssh` rule uses port 21 while Dropbear listens on port 22.
 3. The current named rule must be redirected to the `eth0` management address
    if it is intended to protect management access; its existing destination is
    not the management interface.
 4. The exact gateway address to exclude is not recorded in the tracked
    repository and must be supplied through ignored `.env` before implementation.
-5. Transparent bridge filtering has not been demonstrated by a live packet-path
-   test and must not be assumed from the current UCI zone names.
+5. Domain address sets are per-apply DNS/CDN snapshots and may affect other
+   names sharing the same CDN addresses.
 
 ## Ansible implementation invariants
 
-- Put policy values in ignored `.env` and non-secret structure in tracked
-  Ansible templates/variables.
+- Put machine-specific policy values in ignored `.env` and fixed test-policy
+  intent in tracked Ansible templates/variables.
 - Make all firewall, network, service, and reboot changes through Ansible.
 - Require explicit apply confirmation and local-access confirmation.
 - Require the management address/interface guard for network and firewall work.

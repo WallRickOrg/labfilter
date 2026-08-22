@@ -6,8 +6,31 @@
 openwrt_uci_set: []
 openwrt_uci_delete: []
 openwrt_uci_add_list: []
-openwrt_uci_commit: []
-openwrt_services_reload: []
+# Commit the rendered network and firewall files so LuCI, netifd, and fw4 read
+# the same persisted desired state after an apply.
+openwrt_uci_commit:
+  - firewall
+  - network
+  - wireless
+# The router management path cannot reach OpenWrt feeds. Pin the exact package
+# for its running kernel so Ansible can verify it on the controller, upload it,
+# and let opkg enforce the kernel dependency before changing firewall state.
+openwrt_packages:
+  - name: kmod-nft-bridge
+    filename: kmod-nft-bridge_6.6.73-r1_aarch64_cortex-a76.ipk
+    url: >-
+      https://downloads.openwrt.org/releases/24.10.0/targets/bcm27xx/bcm2712/
+      kmods/6.6.73-1-d3ff9c24b2eb5661c9d6c16a85e195ec/
+      kmod-nft-bridge_6.6.73-r1_aarch64_cortex-a76.ipk
+    sha256: 4261587ddf9d5935a93f9d63a88215469529b5515c792f55878acb2edcd6f5c2
+# Reloading firewall is explicit because this device is an inline bridge; the
+# guarded apply flags are still required before this service can be reloaded.
+openwrt_services_reload:
+  - network
+
+# Reload the station after writing wireless configuration so netifd consumes
+# the desired UCI state without tearing down a working Broadcom association.
+openwrt_reload_wireless: true
 
 # These are the verified live UCI packages, rendered locally and uploaded with raw SSH.
 openwrt_config_templates:
@@ -22,6 +45,24 @@ openwrt_config_templates:
   - uhttpd
   - wireless
 
+# This file is loaded before the generated inet fw4 table so it can filter
+# packets that cross the transparent eth1/eth2 bridge at the bridge hook.
+# Ansible writes it to LuCI's firewall custom-rules script and registers it as
+# a supported firewall4 include, rather than using a hidden automatic include.
+openwrt_nft_templates:
+  - bridge-filter
+
+# LuCI's stock Custom Rules menu is hidden on this fw4-only image by an obsolete
+# fw3 dependency. Install a dedicated editor that exposes the same managed
+# bridge-policy script and reminds users to synchronize UI changes to Ansible.
+openwrt_luci_ui_templates:
+  - source: bridge-nftables.js.j2
+    destination: /www/luci-static/resources/view/openwrt/bridge-nftables.js
+    mode: '0644'
+  - source: bridge-nftables.json.j2
+    destination: /usr/share/luci/menu.d/openwrt-bridge-nftables.json
+    mode: '0644'
+
 # Machine-specific values come from the ignored .env through the wrapper.
 openwrt_management_address: "{{ lookup('env', 'OPENWRT_MANAGEMENT_ADDRESS') }}"
 openwrt_management_interface: "{{ lookup('env', 'OPENWRT_MANAGEMENT_INTERFACE') }}"
@@ -33,6 +74,17 @@ openwrt_upstream_cidr: "{{ lookup('env', 'OPENWRT_UPSTREAM_CIDR') }}"
 openwrt_upstream_address: "{{ lookup('env', 'OPENWRT_UPSTREAM_ADDRESS') }}"
 openwrt_lanwifi_ssid: "{{ lookup('env', 'OPENWRT_LANWIFI_SSID') }}"
 openwrt_lanwifi_psk: "{{ lookup('env', 'OPENWRT_LANWIFI_PSK_BASE64') | b64decode }}"
+# These identifiers reproduce the manually repaired station and its DHCP
+# network without placing wireless credentials in tracked configuration.
+openwrt_wifi_station_section: wifinet2
+openwrt_wifi_network_name: WIFI
 openwrt_rpcd_password: "{{ lookup('env', 'OPENWRT_RPCD_PASSWORD_BASE64') | b64decode }}"
-openwrt_block_rule_name: "{{ lookup('env', 'OPENWRT_BLOCK_RULE_NAME') }}"
-openwrt_block_cnn_ip: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IP') }}"
+openwrt_bridge_interfaces: "{{ lookup('env', 'OPENWRT_BRIDGE_INTERFACES') | split(',') | map('trim') | list }}"
+# Block CNN is intentionally a fixed test policy, not machine-specific config.
+# The controller resolves these hostnames once per guarded apply.
+openwrt_block_rule_name: Block CNN
+openwrt_block_domains:
+  - cnn.com
+  - www.cnn.com
+openwrt_block_cnn_ipv4: []
+openwrt_block_cnn_ipv6: []
