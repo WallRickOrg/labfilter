@@ -74,6 +74,13 @@ connection, verifies them again on OpenWrt, and removes both staged copies.
 Update the pinned filename, URL, and checksum after an OpenWrt kernel upgrade;
 `opkg` intentionally rejects a module built for a different kernel ABI.
 
+`Block CNN` is a fixed test policy in the tracked Ansible variables. During
+each guarded apply, the controller resolves its tracked hostnames to validated
+A and AAAA records and renders that one snapshot into the bridge nftables sets.
+No CNN rule name, hostname, or address configuration belongs in `.env`.
+The TCP 8006 bridge test exception is also fixed in tracked Ansible and contains
+no private backend address or `.env` configuration.
+
 ## Repository layout
 
 - `ARCHITECTURE.md`: verified topology, intended security policy, and acceptance tests.

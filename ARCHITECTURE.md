@@ -86,9 +86,10 @@ corrected. The following facts were confirmed:
 The reproducible implementation uses an Ansible-managed nftables file in
 firewall4's `ruleset-pre` include directory. It defines a separate
 `bridge`-family table with a `forward` hook, matching ingress on the physical
-bridge ports and dropping destinations in the externally supplied CNN IPv4 and
-IPv6 sets. This is intentionally separate from the routed `inet fw4` zones and
-does not require `br_netfilter` or bridge sysctl changes.
+bridge ports and dropping destinations in CNN IPv4 and IPv6 sets resolved from
+tracked hostnames during the apply. This is intentionally
+separate from the routed `inet fw4` zones and does not require `br_netfilter` or
+bridge sysctl changes.
 
 The required `kmod-nft-bridge` kernel package is part of the tracked Ansible
 desired state. Because the management interface cannot reach OpenWrt feeds,
@@ -101,17 +102,18 @@ a control HTTPS request succeeded, and the IPv4 drop counter increased. The
 legacy routed UCI rule was removed because its LuCI visibility incorrectly
 suggested that it governed transparent traffic.
 
-The CNN address sets are a DNS/CDN snapshot in the ignored `.env`, not a claim
-that a hostname is permanently represented by fixed addresses. Refresh the
-sets through the repository's Ansible variables and apply workflow when DNS
-answers change. Encrypted DNS and alternate hostnames require separate policy
-if they are in scope.
+The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
+nftables cannot match hostnames directly, so the controller resolves A and AAAA
+answers during every guarded apply and renders that single snapshot into the
+bridge sets. No CNN values are stored in `.env`. Encrypted DNS does not bypass
+an address already in the sets, but alternate hostnames and DNS changes after
+an apply require another guarded apply.
 
-The Proxmox ingress policy is intentionally narrow: the upstream router sends
-the original frame toward `OPENWRT_PROXMOX_ADDRESS`, and the inline OpenWrt
-bridge permits `OPENWRT_PROXMOX_WEB_PORT` at its bridge-family forwarding hook.
-OpenWrt does not DNAT this traffic and does not install a host route for it;
-both would incorrectly treat a transparent Layer 2 path as routed traffic.
+The Proxmox test exception is a static TCP 8006 accept at the bridge-family
+forwarding hook. It deliberately contains no private backend address or `.env`
+configuration. OpenWrt does not DNAT this traffic and does not install a host
+route for it; both would incorrectly treat a transparent Layer 2 path as routed
+traffic.
 
 ## Current gaps requiring explicit resolution
 
@@ -124,14 +126,13 @@ The bridge filter is active, but the broader live state still has these gaps:
    not the management interface.
 4. The exact gateway address to exclude is not recorded in the tracked
    repository and must be supplied through ignored `.env` before implementation.
-5. Domain address sets are DNS/CDN snapshots. They must be refreshed when
-   current answers change, and may affect other names sharing the same CDN
-   addresses.
+5. Domain address sets are per-apply DNS/CDN snapshots and may affect other
+   names sharing the same CDN addresses.
 
 ## Ansible implementation invariants
 
-- Put policy values in ignored `.env` and non-secret structure in tracked
-  Ansible templates/variables.
+- Put machine-specific policy values in ignored `.env` and fixed test-policy
+  intent in tracked Ansible templates/variables.
 - Make all firewall, network, service, and reboot changes through Ansible.
 - Require explicit apply confirmation and local-access confirmation.
 - Require the management address/interface guard for network and firewall work.

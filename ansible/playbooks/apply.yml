@@ -54,6 +54,25 @@
         or ('firewall' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
 
+    - name: Resolve fixed bridge-block hostnames on the controller
+      # nftables matches addresses rather than DNS names. Resolve the tracked
+      # test hostnames once so one consistent A/AAAA snapshot drives this apply.
+      ansible.builtin.command:
+        argv: "{{ [ansible_playbook_python, playbook_dir + '/../../scripts/resolve-dns.py'] + openwrt_block_domains }}"
+      register: openwrt_block_dns
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      when: "'bridge-filter' in openwrt_nft_templates"
+
+    - name: Use the resolved hostname addresses for the bridge sets
+      # Facts replace the empty defaults before template rendering and all
+      # existing validation, upload, and post-apply checks consume these lists.
+      ansible.builtin.set_fact:
+        openwrt_block_cnn_ipv4: "{{ (openwrt_block_dns.stdout | from_json).ipv4 }}"
+        openwrt_block_cnn_ipv6: "{{ (openwrt_block_dns.stdout | from_json).ipv6 }}"
+      when: "'bridge-filter' in openwrt_nft_templates"
+
     - name: Require externalized values needed by the reproduced templates
       ansible.builtin.assert:
         that:
@@ -70,14 +89,9 @@
           - openwrt_block_rule_name is match('^[A-Za-z0-9 _-]+$')
           - openwrt_bridge_interfaces | length == 2
           - openwrt_bridge_interfaces | select('match', '^[A-Za-z0-9_.:-]+$') | list | length == openwrt_bridge_interfaces | length
-          - openwrt_block_cnn_ipv4 | length > 0
+          - (openwrt_block_cnn_ipv4 | length) + (openwrt_block_cnn_ipv6 | length) > 0
           - openwrt_block_cnn_ipv4 | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | list | length == openwrt_block_cnn_ipv4 | length
-          - openwrt_block_cnn_ipv6 | length > 0
           - openwrt_block_cnn_ipv6 | select('match', '^[0-9A-Fa-f:]+$') | list | length == openwrt_block_cnn_ipv6 | length
-          - openwrt_proxmox_address is match('^([0-9]{1,3}\\.){3}[0-9]{1,3}$')
-          - openwrt_proxmox_web_port is match('^[0-9]+$')
-          - openwrt_proxmox_web_port | int > 0
-          - openwrt_proxmox_web_port | int < 65536
         fail_msg: >-
           One or more required host-specific or secret template values are
           missing or invalid in the ignored .env.
@@ -246,23 +260,12 @@
         fi
       changed_when: false
 
-    - name: Verify the obsolete Proxmox host route is absent
-      # An unnumbered transparent bridge does not route to its downstream host;
-      # frames retain their original L2 path across the two member ports.
-      ansible.builtin.raw: >-
-        if ip -4 route show exact {{ (openwrt_proxmox_address + '/32') | quote }}
-        dev br-lan | grep -q .; then
-          exit 1;
-        fi
-      changed_when: false
-      when: openwrt_proxmox_address | length > 0
-
-    - name: Verify the Proxmox bridge allow is loaded when deployed
+    - name: Verify the static TCP 8006 bridge allow is loaded when deployed
       # Bridge-family validation checks the hook that sees transparent frames;
       # an inet fw4 or LuCI traffic rule would validate the wrong packet path.
       ansible.builtin.raw: >-
         nft list chain bridge openwrt_bridge_filter forward |
-        grep -F 'Proxmox-Web-Allow'
+        grep -F 'Allow-TCP-8006'
       changed_when: false
       when: "'bridge-filter' in openwrt_nft_templates"
 

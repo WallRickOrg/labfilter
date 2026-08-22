@@ -22,9 +22,9 @@ table bridge openwrt_bridge_filter {
     chain forward {
         type filter hook forward priority filter; policy accept;
 
-        # The ISP router already forwards the original frame toward Proxmox.
-        # Accept its web service at the bridge hook without DNAT or L3 routing.
-        iifname { {% for interface in openwrt_bridge_interfaces %}"{{ interface }}"{% if not loop.last %}, {% endif %}{% endfor %} } ip daddr {{ openwrt_proxmox_address }} tcp dport {{ openwrt_proxmox_web_port }} counter accept comment "openwrt: Proxmox-Web-Allow"
+        # Keep the test service exception static and free of private backend
+        # topology; the current accept policy means this does not broaden live behavior.
+        iifname { {% for interface in openwrt_bridge_interfaces %}"{{ interface }}"{% if not loop.last %}, {% endif %}{% endfor %} } tcp dport 8006 counter accept comment "openwrt: Allow-TCP-8006"
 
         # Match physical bridge ingress rather than br-lan, because the bridge
         # hook observes the enslaved ports on a transparent forwarding path.

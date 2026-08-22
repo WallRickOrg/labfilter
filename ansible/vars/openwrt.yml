@@ -58,10 +58,12 @@ openwrt_upstream_address: "{{ lookup('env', 'OPENWRT_UPSTREAM_ADDRESS') }}"
 openwrt_lanwifi_ssid: "{{ lookup('env', 'OPENWRT_LANWIFI_SSID') }}"
 openwrt_lanwifi_psk: "{{ lookup('env', 'OPENWRT_LANWIFI_PSK_BASE64') | b64decode }}"
 openwrt_rpcd_password: "{{ lookup('env', 'OPENWRT_RPCD_PASSWORD_BASE64') | b64decode }}"
-openwrt_block_rule_name: "{{ lookup('env', 'OPENWRT_BLOCK_RULE_NAME') }}"
 openwrt_bridge_interfaces: "{{ lookup('env', 'OPENWRT_BRIDGE_INTERFACES') | split(',') | map('trim') | list }}"
-openwrt_block_cnn_ipv4: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IPV4') | split(',') | map('trim') | list }}"
-openwrt_block_cnn_ipv6: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IPV6') | split(',') | map('trim') | list }}"
-# The transparent bridge exception is limited to the Proxmox web service.
-openwrt_proxmox_address: "{{ lookup('env', 'OPENWRT_PROXMOX_ADDRESS') }}"
-openwrt_proxmox_web_port: "{{ lookup('env', 'OPENWRT_PROXMOX_WEB_PORT') }}"
+# Block CNN is intentionally a fixed test policy, not machine-specific config.
+# The controller resolves these hostnames once per guarded apply.
+openwrt_block_rule_name: Block CNN
+openwrt_block_domains:
+  - cnn.com
+  - www.cnn.com
+openwrt_block_cnn_ipv4: []
+openwrt_block_cnn_ipv6: []
