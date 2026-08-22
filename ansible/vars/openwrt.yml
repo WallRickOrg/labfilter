@@ -11,10 +11,17 @@ openwrt_uci_add_list: []
 openwrt_uci_commit:
   - firewall
   - network
-# firewall4 does not guarantee bridge-family kernel support is installed; keep
-# this dependency in the desired state so the transparent filter is usable.
+# The router management path cannot reach OpenWrt feeds. Pin the exact package
+# for its running kernel so Ansible can verify it on the controller, upload it,
+# and let opkg enforce the kernel dependency before changing firewall state.
 openwrt_packages:
-  - kmod-nft-bridge
+  - name: kmod-nft-bridge
+    filename: kmod-nft-bridge_6.6.73-r1_aarch64_cortex-a76.ipk
+    url: >-
+      https://downloads.openwrt.org/releases/24.10.0/targets/bcm27xx/bcm2712/
+      kmods/6.6.73-1-d3ff9c24b2eb5661c9d6c16a85e195ec/
+      kmod-nft-bridge_6.6.73-r1_aarch64_cortex-a76.ipk
+    sha256: 4261587ddf9d5935a93f9d63a88215469529b5515c792f55878acb2edcd6f5c2
 # Reloading firewall is explicit because this device is an inline bridge; the
 # guarded apply flags are still required before this service can be reloaded.
 openwrt_services_reload:

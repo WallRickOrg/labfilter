@@ -5,6 +5,9 @@ openwrt_uci_delete: []
 openwrt_uci_add_list: []
 openwrt_uci_commit: []
 openwrt_services_reload: []
+# Package staging is opt-in so a generic inventory cannot download or install
+# software until a verified desired-state file supplies pinned package data.
+openwrt_packages: []
 
 # Applying changes is opt-in so an incomplete local checkout cannot alter the bridge.
 openwrt_apply_confirmed: false

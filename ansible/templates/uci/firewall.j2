@@ -31,19 +31,6 @@ config forwarding
 	option dest 'wan'
 
 config rule
-	option name '{{ openwrt_block_rule_name }}'
-	option dest 'wan'
-	{% for address in openwrt_block_cnn_ipv4 %}
-	list dest_ip '{{ address }}'
-	{% endfor %}
-	{% for address in openwrt_block_cnn_ipv6 %}
-	list dest_ip '{{ address }}'
-	{% endfor %}
-	option target 'REJECT'
-	option src 'lan'
-	list proto 'all'
-
-config rule
 	option name 'Allow-DHCP-Renew'
 	option src 'wan'
 	option proto 'udp'

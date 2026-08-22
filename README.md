@@ -67,6 +67,13 @@ The wrapper creates a temporary key file from the base64 value, uses it for the
 Ansible process, and removes it on exit. It never writes the decoded key into
 the repository.
 
+Kernel packages are checksum-pinned in `ansible/vars/openwrt.yml`. Because the
+router management path cannot reach package feeds, Ansible downloads them to a
+private controller temporary directory, transfers them over the same SSH
+connection, verifies them again on OpenWrt, and removes both staged copies.
+Update the pinned filename, URL, and checksum after an OpenWrt kernel upgrade;
+`opkg` intentionally rejects a module built for a different kernel ABI.
+
 ## Repository layout
 
 - `ARCHITECTURE.md`: verified topology, intended security policy, and acceptance tests.

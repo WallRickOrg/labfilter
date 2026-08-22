@@ -97,17 +97,93 @@
       no_log: true
 
   tasks:
-    - name: Refresh OpenWrt package indexes
-      # A fresh image may have feeds configured but no local index for the
-      # kernel module required by the bridge-family nftables policy.
-      ansible.builtin.raw: "opkg update"
-      when: openwrt_packages | length > 0
+    - name: Stage verified OpenWrt packages through the controller
+      # The router has no outbound feed access, so the controller downloads the
+      # exact kernel-matched package and transfers it over the guarded SSH path.
+      block:
+        - name: Create a private controller package directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: openwrt-packages-
+          register: openwrt_package_stage
+          delegate_to: localhost
+          become: false
 
-    - name: Install required OpenWrt packages
-      # The bridge-family nftables hook needs the kernel bridge expression
-      # module; package installation is kept in the same guarded workflow.
-      ansible.builtin.raw: "opkg install {{ item | quote }}"
-      loop: "{{ openwrt_packages }}"
+        - name: Download checksum-pinned OpenWrt packages
+          ansible.builtin.get_url:
+            url: "{{ item.url | regex_replace('\\s+', '') }}"
+            dest: "{{ openwrt_package_stage.path }}/{{ item.filename }}"
+            checksum: "sha256:{{ item.sha256 }}"
+            mode: "0600"
+          loop: "{{ openwrt_packages }}"
+          delegate_to: localhost
+          become: false
+
+        - name: Upload packages with the OpenWrt-compatible SCP protocol
+          # Dropbear exposes legacy SCP but not an SFTP subsystem; forcing SCP
+          # keeps binary transfer independent of Python on the target.
+          ansible.builtin.command:
+            argv:
+              - scp
+              - -O
+              - -P
+              - "{{ ansible_port | default(22) | string }}"
+              - -i
+              - "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY_FILE') }}"
+              - -o
+              - BatchMode=yes
+              - -o
+              - IdentitiesOnly=yes
+              - -o
+              - StrictHostKeyChecking=yes
+              - "{{ openwrt_package_stage.path }}/{{ item.filename }}"
+              - "{{ ansible_user }}@{{ ansible_host }}:/tmp/{{ item.filename }}"
+          loop: "{{ openwrt_packages }}"
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Verify uploaded package checksums on OpenWrt
+          ansible.builtin.raw: >-
+            echo {{ item.sha256 | quote }} /tmp/{{ item.filename | quote }} |
+            sha256sum -c -
+          loop: "{{ openwrt_packages }}"
+          changed_when: false
+
+        - name: Install required OpenWrt packages from local staging
+          # opkg still validates the package architecture and exact running
+          # kernel dependency before installing the bridge-family module.
+          ansible.builtin.raw: >-
+            if opkg status {{ item.name | quote }} 2>/dev/null |
+            grep -q 'Status:.*installed'; then
+              printf '%s\n' already-installed;
+            else
+              opkg install /tmp/{{ item.filename | quote }};
+            fi
+          loop: "{{ openwrt_packages }}"
+          register: openwrt_package_install
+          # During a loop Ansible may expose the aggregate register before an
+          # item result; defaulting stdout keeps status reporting deterministic.
+          changed_when: >-
+            'already-installed' not in
+            (openwrt_package_install.stdout | default(''))
+      always:
+        - name: Remove staged packages from OpenWrt
+          # Package files are transient controller inputs, not router desired
+          # state, so remove only the explicitly pinned staging paths.
+          ansible.builtin.raw: "rm -f /tmp/{{ item.filename | quote }}"
+          loop: "{{ openwrt_packages }}"
+          changed_when: false
+
+        - name: Remove the private controller package directory
+          ansible.builtin.file:
+            path: "{{ openwrt_package_stage.path }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          when:
+            - openwrt_package_stage is defined
+            - openwrt_package_stage.path is defined
       when: openwrt_packages | length > 0
 
     - name: Render and upload verified UCI configuration templates
@@ -121,8 +197,11 @@
       no_log: true
 
     - name: Render and upload the bridge-family nftables policy
+      # This minimal image has no coreutils install command; BusyBox mkdir and
+      # chmod create the firewall4 include directory with explicit permissions.
       ansible.builtin.raw: >-
-        install -d -m 0755 /usr/share/nftables.d/ruleset-pre;
+        mkdir -p /usr/share/nftables.d/ruleset-pre;
+        chmod 0755 /usr/share/nftables.d/ruleset-pre;
         printf '%s' {{ lookup('template', playbook_dir + '/../templates/nft/' + item + '.nft.j2') | quote }} >
         /usr/share/nftables.d/ruleset-pre/99-openwrt-{{ item }}.nft
       loop: "{{ openwrt_nft_templates }}"
@@ -184,6 +263,27 @@
       ansible.builtin.raw: >-
         nft list chain bridge openwrt_bridge_filter forward |
         grep -F 'Proxmox-Web-Allow'
+      changed_when: false
+      when: "'bridge-filter' in openwrt_nft_templates"
+
+    - name: Verify Block CNN is enforced at the bridge hook
+      # The legacy LuCI traffic rule used the routed inet hook and was a false
+      # signal; validate the active L2 chain and every configured set element.
+      ansible.builtin.raw: >-
+        nft list chain bridge openwrt_bridge_filter forward |
+        grep -F {{ ('openwrt: ' + openwrt_block_rule_name) | quote }};
+        {% for address in openwrt_block_cnn_ipv4 %}
+        nft list set bridge openwrt_bridge_filter block_cnn_ipv4 |
+        grep -F {{ address | quote }};
+        {% endfor %}
+        {% for address in openwrt_block_cnn_ipv6 %}
+        nft list set bridge openwrt_bridge_filter block_cnn_ipv6 |
+        grep -F {{ address | quote }};
+        {% endfor %}
+        if uci show firewall |
+        grep -F {{ ("name='" + openwrt_block_rule_name + "'") | quote }}; then
+          exit 1;
+        fi
       changed_when: false
       when: "'bridge-filter' in openwrt_nft_templates"
 

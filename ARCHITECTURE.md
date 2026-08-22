@@ -90,9 +90,16 @@ bridge ports and dropping destinations in the externally supplied CNN IPv4 and
 IPv6 sets. This is intentionally separate from the routed `inet fw4` zones and
 does not require `br_netfilter` or bridge sysctl changes.
 
-The required `kmod-nft-bridge` kernel package is also part of the tracked
-Ansible desired state. Read-only verification found firewall4 and nftables
-core installed but this bridge expression module absent on the live device.
+The required `kmod-nft-bridge` kernel package is part of the tracked Ansible
+desired state. Because the management interface cannot reach OpenWrt feeds,
+the exact kernel-matched package URL and checksum are pinned for controller-side
+download, verified transfer, and local `opkg` installation.
+
+A guarded firewall-only apply installed the package and loaded the bridge
+table without reloading the network. A direct CNN HTTPS request timed out while
+a control HTTPS request succeeded, and the IPv4 drop counter increased. The
+legacy routed UCI rule was removed because its LuCI visibility incorrectly
+suggested that it governed transparent traffic.
 
 The CNN address sets are a DNS/CDN snapshot in the ignored `.env`, not a claim
 that a hostname is permanently represented by fixed addresses. Refresh the
@@ -108,7 +115,7 @@ both would incorrectly treat a transparent Layer 2 path as routed traffic.
 
 ## Current gaps requiring explicit resolution
 
-The live state does not yet implement the stated intent:
+The bridge filter is active, but the broader live state still has these gaps:
 
 1. The current `lan` and `lanwifi` zones accept all input, output, and forwarding.
 2. The current named `ssh` rule uses port 21 while Dropbear listens on port 22.
@@ -117,13 +124,9 @@ The live state does not yet implement the stated intent:
    not the management interface.
 4. The exact gateway address to exclude is not recorded in the tracked
    repository and must be supplied through ignored `.env` before implementation.
-5. The bridge filter has been represented in Ansible but has not been applied
-   or demonstrated by a live packet-path test; the current UCI zone names are
-   not evidence that transparent forwarding is filtered.
-6. The bridge-family Proxmox allow is represented in Ansible but cannot be
-   loaded until the bridge nftables kernel dependency is installed. The live
-   bridge currently has an accept policy, so this missing explicit rule is not
-   the cause of the present Proxmox connectivity failure.
+5. Domain address sets are DNS/CDN snapshots. They must be refreshed when
+   current answers change, and may affect other names sharing the same CDN
+   addresses.
 
 ## Ansible implementation invariants
 
