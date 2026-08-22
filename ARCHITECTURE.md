@@ -121,6 +121,8 @@ Bridge nftables Rules** menu entry that opens an editor for the same script.
 The user explicitly permits edits through this page; each edit restarts the
 firewall and must be copied back into the Ansible template before another
 managed apply, which otherwise replaces the script.
+LuCI caches menu definitions under `/tmp`; the Ansible UI deployment removes
+only that transient cache so the new route appears without a reboot.
 
 The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
 nftables cannot match hostnames directly, so the controller resolves A and AAAA

@@ -91,6 +91,8 @@ On this fw4-only image, the packaged Custom Rules menu is hidden by an obsolete
 fw3 dependency. Ansible therefore installs **Network → Bridge nftables Rules**
 as a dedicated editor for the same script. Direct UI edits are permitted, but
 must be synchronized into the Ansible template before the next managed apply.
+The Ansible deployment also clears LuCI's transient menu cache so the route is
+visible on the next browser refresh.
 The TCP 8006 bridge test exception is also fixed in tracked Ansible and contains
 no private backend address or `.env` configuration.
 

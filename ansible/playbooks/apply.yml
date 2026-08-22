@@ -251,6 +251,13 @@
       loop: "{{ openwrt_luci_ui_templates }}"
       when: openwrt_luci_ui_templates | length > 0
 
+    - name: Invalidate the LuCI menu index after installing UI assets
+      # LuCI caches discovered menu definitions under /tmp. Without removing
+      # this narrow cache entry, a newly installed menu route remains invisible
+      # until its prior cache expires or the device is restarted.
+      ansible.builtin.raw: "rm -f /tmp/luci-indexcache.*"
+      when: openwrt_luci_ui_templates | length > 0
+
     - name: Set verified UCI values
       ansible.builtin.raw: "/sbin/uci set {{ item | quote }}"
       loop: "{{ openwrt_uci_set }}"
