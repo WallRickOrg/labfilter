@@ -9,7 +9,13 @@ config globals 'globals'
 	option ula_prefix '{{ openwrt_ula_prefix }}'
 	option packet_steering '1'
 
-config interface 'lanwifi'
+# Preserve the pre-existing wireless DHCP network so the LAN zone's current
+# membership remains reproducible even though the active station uses WIFI.
+config interface 'openwrtwifi'
+	option proto 'dhcp'
+
+# The manually repaired station attaches to this DHCP client network.
+config interface '{{ openwrt_wifi_network_name }}'
 	option proto 'dhcp'
 
 config interface 'lan'

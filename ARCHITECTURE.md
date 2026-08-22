@@ -27,12 +27,18 @@ corrected. The following facts were confirmed:
 - `eth0` is the `management` interface and obtains its address through DHCP.
 - `eth1` and `eth2` are ports of `br-lan`; the `lan` interface has no L3 address
   and is configured as a bridge-facing interface.
-- `phy0-sta0` is the wireless station interface and belongs to `lanwifi`, which
+- `phy0-sta0` is the wireless station interface and belongs to the configured
+  wireless DHCP network, which
   obtains its address through DHCP.
 - The default route leaves through `eth0`; the wireless station has a separate
   upstream route.
 - The live firewall has a `lan` zone with ACCEPT input, output, and forwarding,
-  and a `lanwifi` zone with ACCEPT input, output, and forwarding.
+  and a legacy wireless zone with ACCEPT input, output, and forwarding.
+
+The wireless station configuration is rendered from the ignored SSID and
+base64-encoded PSK values. A guarded wireless apply uses OpenWrt's normal
+wireless reload and requires association plus DHCP before succeeding;
+wired management remains the independent recovery path.
 - Dropbear currently listens on TCP port 22. LuCI's HTTP services listen on
   TCP ports 80 and 443.
 - A custom firewall rule is named `ssh` but currently targets TCP port 21 and
@@ -54,7 +60,7 @@ corrected. The following facts were confirmed:
   application must verify the current management address before a protected
   change and verify it remains present afterward.
 
-### Wireless DMZ plane: `phy0-sta0` / `lanwifi`
+### Wireless DMZ plane: `phy0-sta0`
 
 - The wireless station is an untrusted DMZ-side ingress, not a trusted LAN.
 - Only TCP ports 21, 80, and 443 may be accepted to the OpenWrt device from the
@@ -102,6 +108,13 @@ a control HTTPS request succeeded, and the IPv4 drop counter increased. The
 legacy routed UCI rule was removed because its LuCI visibility incorrectly
 suggested that it governed transparent traffic.
 
+LuCI's standard Traffic Rules editor manages routed `inet fw4` policy and does
+not expose bridge-family hooks or firewall4 include files. Therefore the active
+bridge policy is not shown as a LuCI Traffic Rule; representing it there would
+be misleading because that packet path bypasses the rule. Moving this policy
+into a UI-visible Traffic Rule requires an explicitly reviewed routed redesign
+or bridge-netfilter integration, both of which alter forwarding behavior.
+
 The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
 nftables cannot match hostnames directly, so the controller resolves A and AAAA
 answers during every guarded apply and renders that single snapshot into the
@@ -119,7 +132,7 @@ traffic.
 
 The bridge filter is active, but the broader live state still has these gaps:
 
-1. The current `lan` and `lanwifi` zones accept all input, output, and forwarding.
+1. The current `lan` and legacy wireless zones accept all input, output, and forwarding.
 2. The current named `ssh` rule uses port 21 while Dropbear listens on port 22.
 3. The current named rule must be redirected to the `eth0` management address
    if it is intended to protect management access; its existing destination is

@@ -26,6 +26,7 @@
       when: >-
         ('network' in openwrt_config_templates)
         or ('firewall' in openwrt_config_templates)
+        or ('wireless' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
         or (openwrt_uci_set | select('match', '^(network|firewall)\.') | list | length > 0)
         or (openwrt_uci_delete | select('match', '^(network|firewall)\.') | list | length > 0)
@@ -42,16 +43,18 @@
       when: >-
         ('network' in openwrt_config_templates)
         or ('firewall' in openwrt_config_templates)
+        or ('wireless' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
 
     - name: Confirm current local management access before protected changes
       ansible.builtin.raw: >-
         /sbin/ip -4 addr show dev {{ openwrt_management_interface | quote }} |
-        grep -F -- {{ openwrt_management_address | quote }}
+        grep -F -- {{ openwrt_management_address | quote }} > /dev/null
       changed_when: false
       when: >-
         ('network' in openwrt_config_templates)
         or ('firewall' in openwrt_config_templates)
+        or ('wireless' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
 
     - name: Resolve fixed bridge-block hostnames on the controller
@@ -85,6 +88,16 @@
           - openwrt_lanwifi_ssid | length > 0
           - openwrt_lanwifi_psk | length > 0
           - openwrt_rpcd_password | length > 0
+        fail_msg: >-
+          One or more required host-specific or secret template values are
+          missing or invalid in the ignored .env.
+      when: openwrt_config_templates | length > 0
+
+    - name: Require validated bridge-filter inputs
+      # Keep bridge-only checks independent so a wireless-only recovery does
+      # not need DNS-derived nftables values or package deployment.
+      ansible.builtin.assert:
+        that:
           - openwrt_block_rule_name | length > 0
           - openwrt_block_rule_name is match('^[A-Za-z0-9 _-]+$')
           - openwrt_bridge_interfaces | length == 2
@@ -93,9 +106,9 @@
           - openwrt_block_cnn_ipv4 | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | list | length == openwrt_block_cnn_ipv4 | length
           - openwrt_block_cnn_ipv6 | select('match', '^[0-9A-Fa-f:]+$') | list | length == openwrt_block_cnn_ipv6 | length
         fail_msg: >-
-          One or more required host-specific or secret template values are
-          missing or invalid in the ignored .env.
-      when: openwrt_config_templates | length > 0
+          Refusing to apply: bridge interfaces or resolved block addresses are
+          missing or invalid.
+      when: "'bridge-filter' in openwrt_nft_templates"
 
     - name: Verify UCI is available before changing state
       ansible.builtin.raw: "test -x /sbin/uci"
@@ -247,6 +260,56 @@
       loop: "{{ openwrt_services_reload }}"
       when: openwrt_services_reload | length > 0
 
+    - name: Verify the rendered wireless credentials are persisted
+      # Compare on the router under no_log so neither the tracked SSID variable
+      # nor decoded password can appear in task output or controller logs.
+      ansible.builtin.raw: >-
+        test "$(uci -q get wireless.{{ openwrt_wifi_station_section }}.mode)" = sta;
+        test "$(uci -q get wireless.{{ openwrt_wifi_station_section }}.network)" =
+        {{ openwrt_wifi_network_name | quote }};
+        test "$(uci -q get wireless.{{ openwrt_wifi_station_section }}.ssid)" =
+        {{ openwrt_lanwifi_ssid | quote }};
+        test "$(uci -q get wireless.{{ openwrt_wifi_station_section }}.key)" =
+        {{ openwrt_lanwifi_psk | quote }}
+      changed_when: false
+      no_log: true
+      when:
+        - openwrt_reload_wireless | bool
+        - "'wireless' in openwrt_config_templates"
+
+    - name: Reload the managed wireless station
+      # The Broadcom station reconnects reliably through OpenWrt's normal
+      # wireless reload. Avoid a destructive wpad restart, which drops an
+      # established station into an unrecoverable scheduled-scan loop.
+      ansible.builtin.raw: >-
+        /sbin/wifi reload
+      when:
+        - openwrt_reload_wireless | bool
+        - "'wireless' in openwrt_config_templates"
+
+    - name: Wait for wireless association and DHCP
+      # Do not report a successful apply until the station is associated and
+      # the configured wireless DHCP network has regained an IPv4 address.
+      ansible.builtin.raw: >-
+        attempt=0;
+        while [ "$attempt" -lt 30 ]; do
+          device="$(ubus call network.interface.{{ openwrt_wifi_network_name }} status |
+          jsonfilter -e '@.l3_device' 2>/dev/null || true)";
+          if [ -n "$device" ] &&
+          ubus call network.interface.{{ openwrt_wifi_network_name }} status |
+          jsonfilter -e '@.up' | grep -qx true &&
+          /sbin/ip -4 -o addr show dev "$device" | grep -q ' inet '; then
+            exit 0;
+          fi;
+          attempt=$((attempt + 1));
+          sleep 2;
+        done;
+        exit 1
+      changed_when: false
+      when:
+        - openwrt_reload_wireless | bool
+        - "'wireless' in openwrt_config_templates"
+
     - name: Verify the obsolete Proxmox redirect is absent
       # Transparent bridge traffic retains the Proxmox destination and must not
       # be translated as though it terminated on an OpenWrt routed interface.
@@ -293,7 +356,7 @@
     - name: Confirm the management address remains present after changes
       ansible.builtin.raw: >-
         /sbin/ip -4 addr show dev {{ openwrt_management_interface | quote }} |
-        grep -F -- {{ openwrt_management_address | quote }}
+        grep -F -- {{ openwrt_management_address | quote }} > /dev/null
       changed_when: false
       when:
         - openwrt_allow_network_changes | bool

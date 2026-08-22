@@ -23,6 +23,11 @@ The live-specific values required by the reproduced templates are also kept in
 wireless SSID, and base64-encoded wireless/rpcd credentials. Keep those values
 local and verify them before applying.
 
+When the wireless template is selected, Ansible writes those ignored SSID/PSK
+values, reloads the managed station, and waits for its configured DHCP network
+to recover.
+The apply fails if association or IPv4 recovery does not complete.
+
 ## Discover the live state
 
 Run the read-only discovery playbook after the management machine can reach the
@@ -78,6 +83,9 @@ Update the pinned filename, URL, and checksum after an OpenWrt kernel upgrade;
 each guarded apply, the controller resolves its tracked hostnames to validated
 A and AAAA records and renders that one snapshot into the bridge nftables sets.
 No CNN rule name, hostname, or address configuration belongs in `.env`.
+Because transparent bridge forwarding bypasses LuCI's routed Traffic Rules,
+this active bridge-family policy is not listed in that UI; see
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the packet-path limitation.
 The TCP 8006 bridge test exception is also fixed in tracked Ansible and contains
 no private backend address or `.env` configuration.
 

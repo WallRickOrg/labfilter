@@ -15,6 +15,10 @@ config zone
 	option forward 'ACCEPT'
 	list network 'lan'
 	list network 'management'
+	# Keep both discovered wireless DHCP networks inside the locally managed
+	# LAN zone so the repaired station retains local administrative access.
+	list network 'openwrtwifi'
+	list network '{{ openwrt_wifi_network_name }}'
 
 config zone
 	option name 'wan'
@@ -128,7 +132,6 @@ config zone
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
-	list network 'lanwifi'
 
 config rule
 	option name 'ssh'

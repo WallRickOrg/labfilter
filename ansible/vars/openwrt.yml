@@ -11,6 +11,7 @@ openwrt_uci_add_list: []
 openwrt_uci_commit:
   - firewall
   - network
+  - wireless
 # The router management path cannot reach OpenWrt feeds. Pin the exact package
 # for its running kernel so Ansible can verify it on the controller, upload it,
 # and let opkg enforce the kernel dependency before changing firewall state.
@@ -27,6 +28,10 @@ openwrt_packages:
 openwrt_services_reload:
   - network
   - firewall
+
+# Reload the station after writing wireless configuration so netifd consumes
+# the desired UCI state without tearing down a working Broadcom association.
+openwrt_reload_wireless: true
 
 # These are the verified live UCI packages, rendered locally and uploaded with raw SSH.
 openwrt_config_templates:
@@ -57,6 +62,10 @@ openwrt_upstream_cidr: "{{ lookup('env', 'OPENWRT_UPSTREAM_CIDR') }}"
 openwrt_upstream_address: "{{ lookup('env', 'OPENWRT_UPSTREAM_ADDRESS') }}"
 openwrt_lanwifi_ssid: "{{ lookup('env', 'OPENWRT_LANWIFI_SSID') }}"
 openwrt_lanwifi_psk: "{{ lookup('env', 'OPENWRT_LANWIFI_PSK_BASE64') | b64decode }}"
+# These identifiers reproduce the manually repaired station and its DHCP
+# network without placing wireless credentials in tracked configuration.
+openwrt_wifi_station_section: wifinet2
+openwrt_wifi_network_name: WIFI
 openwrt_rpcd_password: "{{ lookup('env', 'OPENWRT_RPCD_PASSWORD_BASE64') | b64decode }}"
 openwrt_bridge_interfaces: "{{ lookup('env', 'OPENWRT_BRIDGE_INTERFACES') | split(',') | map('trim') | list }}"
 # Block CNN is intentionally a fixed test policy, not machine-specific config.

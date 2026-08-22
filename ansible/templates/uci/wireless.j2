@@ -1,24 +1,17 @@
-# Reproduces the verified disabled AP and upstream wireless station settings.
+# Reproduces the verified upstream wireless station settings.
 config wifi-device 'radio0'
 	option type 'mac80211'
 	option path 'platform/axi/1001100000.mmc/mmc_host/mmc1/mmc1:0001/mmc1:0001:1'
 	option band '5g'
 	option htmode 'HT20'
-	option country 'CA'
 	option cell_density '0'
 
-config wifi-iface 'default_radio0'
-	option device 'radio0'
-	option network 'lan'
-	option mode 'ap'
-	option ssid 'OpenWrt'
-	option encryption 'none'
-	option disabled '1'
-
-config wifi-iface 'wifinet1'
+# This is a station rather than an access point; the SSID and key come only
+# from the ignored local environment at render time.
+config wifi-iface '{{ openwrt_wifi_station_section }}'
 	option device 'radio0'
 	option mode 'sta'
-	option network 'lanwifi'
+	option network '{{ openwrt_wifi_network_name }}'
 	option ssid '{{ openwrt_lanwifi_ssid }}'
 	option encryption 'psk2'
 	option key '{{ openwrt_lanwifi_psk }}'

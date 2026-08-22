@@ -5,6 +5,9 @@ openwrt_uci_delete: []
 openwrt_uci_add_list: []
 openwrt_uci_commit: []
 openwrt_services_reload: []
+# Wireless process recovery is opt-in so generic inventories cannot disrupt a
+# radio unless verified desired-state variables explicitly enable it.
+openwrt_reload_wireless: false
 # Package staging is opt-in so a generic inventory cannot download or install
 # software until a verified desired-state file supplies pinned package data.
 openwrt_packages: []
