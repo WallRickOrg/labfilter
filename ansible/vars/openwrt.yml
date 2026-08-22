@@ -6,7 +6,11 @@
 openwrt_uci_set: []
 openwrt_uci_delete: []
 openwrt_uci_add_list: []
-openwrt_uci_commit: []
+# Commit the packages whose rendered files drive the routed port-forward so
+# LuCI and netifd read the same persisted desired state after an apply.
+openwrt_uci_commit:
+  - firewall
+  - network
 # firewall4 does not guarantee bridge-family kernel support is installed; keep
 # this dependency in the desired state so the transparent filter is usable.
 openwrt_packages:
@@ -14,6 +18,7 @@ openwrt_packages:
 # Reloading firewall is explicit because this device is an inline bridge; the
 # guarded apply flags are still required before this service can be reloaded.
 openwrt_services_reload:
+  - network
   - firewall
 
 # These are the verified live UCI packages, rendered locally and uploaded with raw SSH.

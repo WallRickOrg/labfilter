@@ -105,7 +105,9 @@ forwarded TCP `OPENWRT_PROXMOX_WEB_PORT` traffic is DNATed from the active
 OpenWrt upstream address to `OPENWRT_PROXMOX_ADDRESS` (TCP 8006 in the current
 local policy). The current live eth0 path is classified in the `lan` firewall
 zone while the configured `wan` interface is down, so the source zone is an
-externalized policy value. No general inbound port forwarding is enabled.
+externalized policy value. Because the upstream and Proxmox addresses overlap,
+Ansible also installs a host route for the Proxmox address through `br-lan`.
+No general inbound port forwarding is enabled.
 
 ## Current gaps requiring explicit resolution
 
@@ -124,6 +126,9 @@ The live state does not yet implement the stated intent:
 6. The current live firewall has no DNAT/port-forward for the upstream router's
    TCP 8006 traffic to Proxmox; the previously applied Wi-Fi allow rule does
    not represent this path.
+7. The live route table currently prefers eth0 for the Proxmox address and ARP
+   fails there; the desired state must install a specific bridge-side host
+   route before the DNAT can reach the backend.
 
 ## Ansible implementation invariants
 

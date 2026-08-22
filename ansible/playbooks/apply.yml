@@ -155,6 +155,24 @@
       loop: "{{ openwrt_services_reload }}"
       when: openwrt_services_reload | length > 0
 
+    - name: Verify the Proxmox redirect is persisted and loaded for LuCI
+      ansible.builtin.raw: >-
+        uci show firewall |
+        grep -F "name='Proxmox-Web-Forward'" &&
+        nft list chain inet fw4 dstnat_lan |
+        grep -F 'Proxmox-Web-Forward'
+      changed_when: false
+      when:
+        - openwrt_proxmox_address | length > 0
+        - openwrt_proxmox_web_port | length > 0
+
+    - name: Verify the Proxmox host route uses the bridge side
+      ansible.builtin.raw: >-
+        ip -4 route get {{ openwrt_proxmox_address | quote }} |
+        grep -F -- 'dev br-lan'
+      changed_when: false
+      when: openwrt_proxmox_address | length > 0
+
     - name: Confirm the management address remains present after changes
       ansible.builtin.raw: >-
         /sbin/ip -4 addr show dev {{ openwrt_management_interface | quote }} |
