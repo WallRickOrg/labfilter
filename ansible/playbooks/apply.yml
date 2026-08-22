@@ -97,6 +97,12 @@
       no_log: true
 
   tasks:
+    - name: Refresh OpenWrt package indexes
+      # A fresh image may have feeds configured but no local index for the
+      # kernel module required by the bridge-family nftables policy.
+      ansible.builtin.raw: "opkg update"
+      when: openwrt_packages | length > 0
+
     - name: Install required OpenWrt packages
       # The bridge-family nftables hook needs the kernel bridge expression
       # module; package installation is kept in the same guarded workflow.
