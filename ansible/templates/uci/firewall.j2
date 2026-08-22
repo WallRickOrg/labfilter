@@ -143,6 +143,17 @@ config zone
 	option forward 'ACCEPT'
 	list network 'lanwifi'
 
+# Permit only the DMZ-side path needed to administer the Proxmox web service;
+# the destination zone remains the eth0-backed lan/management network.
+config rule
+	option name 'Allow-Proxmox-Web'
+	option src 'lanwifi'
+	option dest 'lan'
+	option dest_ip '{{ openwrt_proxmox_address }}'
+	option dest_port '{{ openwrt_proxmox_web_port }}'
+	option proto 'tcp'
+	option target 'ACCEPT'
+
 config rule
 	option name 'ssh'
 	list proto 'tcp'
