@@ -89,11 +89,11 @@ wired management remains the independent recovery path.
 
 ### Bridge filtering implementation
 
-The reproducible implementation uses an Ansible-managed nftables file in
-firewall4's `ruleset-pre` include directory. It defines a separate
-`bridge`-family table with a `forward` hook, matching ingress on the physical
-bridge ports and dropping destinations in CNN IPv4 and IPv6 sets resolved from
-tracked hostnames during the apply. This is intentionally
+The reproducible implementation registers an Ansible-managed firewall4 script
+include and renders it to `/etc/firewall.user`, LuCI's Custom Rules file. The
+script defines a separate `bridge`-family table with a `forward` hook, matching
+ingress on the physical bridge ports and dropping destinations in CNN IPv4 and
+IPv6 sets resolved from tracked hostnames during the apply. This is intentionally
 separate from the routed `inet fw4` zones and does not require `br_netfilter` or
 bridge sysctl changes.
 
@@ -108,12 +108,12 @@ a control HTTPS request succeeded, and the IPv4 drop counter increased. The
 legacy routed UCI rule was removed because its LuCI visibility incorrectly
 suggested that it governed transparent traffic.
 
-LuCI's standard Traffic Rules editor manages routed `inet fw4` policy and does
-not expose bridge-family hooks or firewall4 include files. Therefore the active
-bridge policy is not shown as a LuCI Traffic Rule; representing it there would
-be misleading because that packet path bypasses the rule. Moving this policy
-into a UI-visible Traffic Rule requires an explicitly reviewed routed redesign
-or bridge-netfilter integration, both of which alter forwarding behavior.
+LuCI's standard Traffic Rules editor manages routed `inet fw4` policy, not
+bridge hooks. The policy is therefore registered as a native firewall4 script
+include and rendered into LuCI's **Network → Firewall → Custom Rules** file,
+where its actual nftables commands are visible. Representing the policy as a
+routed Traffic Rule would still be misleading because that packet path bypasses
+the rule.
 
 The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
 nftables cannot match hostnames directly, so the controller resolves A and AAAA

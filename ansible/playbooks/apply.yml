@@ -223,14 +223,15 @@
       when: openwrt_config_templates | length > 0
       no_log: true
 
-    - name: Render and upload the bridge-family nftables policy
-      # This minimal image has no coreutils install command; BusyBox mkdir and
-      # chmod create the firewall4 include directory with explicit permissions.
+    - name: Render the bridge-family policy into LuCI Custom Rules
+      # firewall4 executes /etc/firewall.user through the named UCI include.
+      # This keeps the actual nftables bridge policy visible in LuCI while the
+      # bridge hook continues to enforce transparent forwarding.
       ansible.builtin.raw: >-
-        mkdir -p /usr/share/nftables.d/ruleset-pre;
-        chmod 0755 /usr/share/nftables.d/ruleset-pre;
+        rm -f /usr/share/nftables.d/ruleset-pre/99-openwrt-{{ item }}.nft;
         printf '%s' {{ lookup('template', playbook_dir + '/../templates/nft/' + item + '.nft.j2') | quote }} >
-        /usr/share/nftables.d/ruleset-pre/99-openwrt-{{ item }}.nft
+        /etc/firewall.user;
+        chmod 0700 /etc/firewall.user
       loop: "{{ openwrt_nft_templates }}"
       when: openwrt_nft_templates | length > 0
       no_log: true
@@ -259,6 +260,12 @@
       ansible.builtin.raw: "/etc/init.d/{{ item | quote }} reload"
       loop: "{{ openwrt_services_reload }}"
       when: openwrt_services_reload | length > 0
+
+    - name: Restart firewall after updating the LuCI-visible bridge policy
+      # The documented bridge include is a firewall script, so restart fw4 to
+      # execute it after the old automatic include has been removed.
+      ansible.builtin.raw: "/etc/init.d/firewall restart"
+      when: "'bridge-filter' in openwrt_nft_templates"
 
     - name: Verify the rendered wireless credentials are persisted
       # Compare on the router under no_log so neither the tracked SSID variable

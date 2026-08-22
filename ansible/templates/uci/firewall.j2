@@ -1,12 +1,19 @@
 # Reproduces the verified zones, forwarding, and explicitly configured rules.
 config defaults
-	# Keep firewall4's standard nftables.d pre-table includes enabled. The
-	# bridge-family policy is loaded from that include location.
+	# Keep firewall4's standard nftables.d support enabled for OpenWrt packages.
 	option auto_includes '1'
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
 	option synflood_protect '1'
+
+# Register the bridge policy through firewall4's supported script include.
+# LuCI exposes this managed file at Network → Firewall → Custom Rules.
+config include 'openwrt_bridge_filter'
+	option enabled '1'
+	option type 'script'
+	option path '/etc/firewall.user'
+	option reload '1'
 
 config zone
 	option name 'lan'

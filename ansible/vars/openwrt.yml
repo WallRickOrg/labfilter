@@ -27,7 +27,6 @@ openwrt_packages:
 # guarded apply flags are still required before this service can be reloaded.
 openwrt_services_reload:
   - network
-  - firewall
 
 # Reload the station after writing wireless configuration so netifd consumes
 # the desired UCI state without tearing down a working Broadcom association.
@@ -48,6 +47,8 @@ openwrt_config_templates:
 
 # This file is loaded before the generated inet fw4 table so it can filter
 # packets that cross the transparent eth1/eth2 bridge at the bridge hook.
+# Ansible writes it to LuCI's firewall custom-rules script and registers it as
+# a supported firewall4 include, rather than using a hidden automatic include.
 openwrt_nft_templates:
   - bridge-filter
 

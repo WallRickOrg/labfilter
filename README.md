@@ -84,7 +84,8 @@ each guarded apply, the controller resolves its tracked hostnames to validated
 A and AAAA records and renders that one snapshot into the bridge nftables sets.
 No CNN rule name, hostname, or address configuration belongs in `.env`.
 Because transparent bridge forwarding bypasses LuCI's routed Traffic Rules,
-this active bridge-family policy is not listed in that UI; see
+the policy is managed as a native firewall4 script include instead. Its actual
+nftables rules are visible at **Network → Firewall → Custom Rules**; see
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the packet-path limitation.
 The TCP 8006 bridge test exception is also fixed in tracked Ansible and contains
 no private backend address or `.env` configuration.
