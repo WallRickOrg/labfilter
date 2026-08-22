@@ -111,9 +111,11 @@
       when: openwrt_packages | length > 0
 
     - name: Render and upload verified UCI configuration templates
+      # The target image does not provide base64; shell quoting keeps the
+      # rendered content intact while still avoiding an intermediate file.
       ansible.builtin.raw: >-
-        printf '%s' {{ lookup('template', playbook_dir + '/../templates/uci/' + item + '.j2') | b64encode | quote }} |
-        base64 -d > /etc/config/{{ item | quote }}
+        printf '%s' {{ lookup('template', playbook_dir + '/../templates/uci/' + item + '.j2') | quote }} >
+        /etc/config/{{ item | quote }}
       loop: "{{ openwrt_config_templates }}"
       when: openwrt_config_templates | length > 0
       no_log: true
@@ -121,8 +123,8 @@
     - name: Render and upload the bridge-family nftables policy
       ansible.builtin.raw: >-
         install -d -m 0755 /usr/share/nftables.d/ruleset-pre;
-        printf '%s' {{ lookup('template', playbook_dir + '/../templates/nft/' + item + '.nft.j2') | b64encode | quote }} |
-        base64 -d > /usr/share/nftables.d/ruleset-pre/99-openwrt-{{ item }}.nft
+        printf '%s' {{ lookup('template', playbook_dir + '/../templates/nft/' + item + '.nft.j2') | quote }} >
+        /usr/share/nftables.d/ruleset-pre/99-openwrt-{{ item }}.nft
       loop: "{{ openwrt_nft_templates }}"
       when: openwrt_nft_templates | length > 0
       no_log: true
