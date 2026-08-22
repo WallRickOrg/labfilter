@@ -78,6 +78,7 @@
           - openwrt_proxmox_web_port is match('^[0-9]+$')
           - openwrt_proxmox_web_port | int > 0
           - openwrt_proxmox_web_port | int < 65536
+          - openwrt_proxmox_source_zone is match('^[A-Za-z0-9_-]+$')
         fail_msg: >-
           One or more required host-specific or secret template values are
           missing or invalid in the ignored .env.

@@ -100,10 +100,12 @@ sets through the repository's Ansible variables and apply workflow when DNS
 answers change. Encrypted DNS and alternate hostnames require separate policy
 if they are in scope.
 
-The DMZ-to-management exception for Proxmox is intentionally narrow: traffic
-from `lanwifi` to the externally supplied `OPENWRT_PROXMOX_ADDRESS` is allowed
-only on `OPENWRT_PROXMOX_WEB_PORT` (TCP 8006 in the current local policy).
-No general DMZ-to-management forwarding is enabled by this exception.
+The Proxmox ingress policy is intentionally narrow: the upstream router's
+forwarded TCP `OPENWRT_PROXMOX_WEB_PORT` traffic is DNATed from the active
+OpenWrt upstream address to `OPENWRT_PROXMOX_ADDRESS` (TCP 8006 in the current
+local policy). The current live eth0 path is classified in the `lan` firewall
+zone while the configured `wan` interface is down, so the source zone is an
+externalized policy value. No general inbound port forwarding is enabled.
 
 ## Current gaps requiring explicit resolution
 
@@ -119,9 +121,9 @@ The live state does not yet implement the stated intent:
 5. The bridge filter has been represented in Ansible but has not been applied
    or demonstrated by a live packet-path test; the current UCI zone names are
    not evidence that transparent forwarding is filtered.
-6. The current live firewall has no `lanwifi`-to-`lan` forwarding exception for
-   the Proxmox web service, so clients on the Wi-Fi/DMZ path cannot reach the
-   management-side Proxmox address on TCP 8006.
+6. The current live firewall has no DNAT/port-forward for the upstream router's
+   TCP 8006 traffic to Proxmox; the previously applied Wi-Fi allow rule does
+   not represent this path.
 
 ## Ansible implementation invariants
 

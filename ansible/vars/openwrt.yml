@@ -53,3 +53,4 @@ openwrt_block_cnn_ipv6: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IPV6') | split(',')
 # The DMZ-to-management exception is limited to the Proxmox web service.
 openwrt_proxmox_address: "{{ lookup('env', 'OPENWRT_PROXMOX_ADDRESS') }}"
 openwrt_proxmox_web_port: "{{ lookup('env', 'OPENWRT_PROXMOX_WEB_PORT') }}"
+openwrt_proxmox_source_zone: "{{ lookup('env', 'OPENWRT_PROXMOX_SOURCE_ZONE') }}"
