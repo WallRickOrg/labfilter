@@ -26,6 +26,7 @@
       when: >-
         ('network' in openwrt_config_templates)
         or ('firewall' in openwrt_config_templates)
+        or (openwrt_nft_templates | length > 0)
         or (openwrt_uci_set | select('match', '^(network|firewall)\.') | list | length > 0)
         or (openwrt_uci_delete | select('match', '^(network|firewall)\.') | list | length > 0)
         or (openwrt_uci_add_list | select('match', '^(network|firewall)\.') | list | length > 0)
@@ -41,6 +42,7 @@
       when: >-
         ('network' in openwrt_config_templates)
         or ('firewall' in openwrt_config_templates)
+        or (openwrt_nft_templates | length > 0)
 
     - name: Confirm current local management access before protected changes
       ansible.builtin.raw: >-
@@ -50,6 +52,7 @@
       when: >-
         ('network' in openwrt_config_templates)
         or ('firewall' in openwrt_config_templates)
+        or (openwrt_nft_templates | length > 0)
 
     - name: Require externalized values needed by the reproduced templates
       ansible.builtin.assert:
@@ -64,10 +67,16 @@
           - openwrt_lanwifi_psk | length > 0
           - openwrt_rpcd_password | length > 0
           - openwrt_block_rule_name | length > 0
-          - openwrt_block_cnn_ip | length > 0
+          - openwrt_block_rule_name is match('^[A-Za-z0-9 _-]+$')
+          - openwrt_bridge_interfaces | length == 2
+          - openwrt_bridge_interfaces | select('match', '^[A-Za-z0-9_.:-]+$') | list | length == openwrt_bridge_interfaces | length
+          - openwrt_block_cnn_ipv4 | length > 0
+          - openwrt_block_cnn_ipv4 | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | list | length == openwrt_block_cnn_ipv4 | length
+          - openwrt_block_cnn_ipv6 | length > 0
+          - openwrt_block_cnn_ipv6 | select('match', '^[0-9A-Fa-f:]+$') | list | length == openwrt_block_cnn_ipv6 | length
         fail_msg: >-
           One or more required host-specific or secret template values are
-          missing from the ignored .env.
+          missing or invalid in the ignored .env.
       when: openwrt_config_templates | length > 0
 
     - name: Verify UCI is available before changing state
@@ -84,12 +93,28 @@
       no_log: true
 
   tasks:
+    - name: Install required OpenWrt packages
+      # The bridge-family nftables hook needs the kernel bridge expression
+      # module; package installation is kept in the same guarded workflow.
+      ansible.builtin.raw: "/usr/bin/opkg install {{ item | quote }}"
+      loop: "{{ openwrt_packages }}"
+      when: openwrt_packages | length > 0
+
     - name: Render and upload verified UCI configuration templates
       ansible.builtin.raw: >-
         printf '%s' {{ lookup('template', playbook_dir + '/../templates/uci/' + item + '.j2') | b64encode | quote }} |
         base64 -d > /etc/config/{{ item | quote }}
       loop: "{{ openwrt_config_templates }}"
       when: openwrt_config_templates | length > 0
+      no_log: true
+
+    - name: Render and upload the bridge-family nftables policy
+      ansible.builtin.raw: >-
+        install -d -m 0755 /usr/share/nftables.d/ruleset-pre;
+        printf '%s' {{ lookup('template', playbook_dir + '/../templates/nft/' + item + '.nft.j2') | b64encode | quote }} |
+        base64 -d > /usr/share/nftables.d/ruleset-pre/99-openwrt-{{ item }}.nft
+      loop: "{{ openwrt_nft_templates }}"
+      when: openwrt_nft_templates | length > 0
       no_log: true
 
     - name: Set verified UCI values

@@ -7,7 +7,14 @@ openwrt_uci_set: []
 openwrt_uci_delete: []
 openwrt_uci_add_list: []
 openwrt_uci_commit: []
-openwrt_services_reload: []
+# firewall4 does not guarantee bridge-family kernel support is installed; keep
+# this dependency in the desired state so the transparent filter is usable.
+openwrt_packages:
+  - kmod-nft-bridge
+# Reloading firewall is explicit because this device is an inline bridge; the
+# guarded apply flags are still required before this service can be reloaded.
+openwrt_services_reload:
+  - firewall
 
 # These are the verified live UCI packages, rendered locally and uploaded with raw SSH.
 openwrt_config_templates:
@@ -22,6 +29,11 @@ openwrt_config_templates:
   - uhttpd
   - wireless
 
+# This file is loaded before the generated inet fw4 table so it can filter
+# packets that cross the transparent eth1/eth2 bridge at the bridge hook.
+openwrt_nft_templates:
+  - bridge-filter
+
 # Machine-specific values come from the ignored .env through the wrapper.
 openwrt_management_address: "{{ lookup('env', 'OPENWRT_MANAGEMENT_ADDRESS') }}"
 openwrt_management_interface: "{{ lookup('env', 'OPENWRT_MANAGEMENT_INTERFACE') }}"
@@ -35,4 +47,6 @@ openwrt_lanwifi_ssid: "{{ lookup('env', 'OPENWRT_LANWIFI_SSID') }}"
 openwrt_lanwifi_psk: "{{ lookup('env', 'OPENWRT_LANWIFI_PSK_BASE64') | b64decode }}"
 openwrt_rpcd_password: "{{ lookup('env', 'OPENWRT_RPCD_PASSWORD_BASE64') | b64decode }}"
 openwrt_block_rule_name: "{{ lookup('env', 'OPENWRT_BLOCK_RULE_NAME') }}"
-openwrt_block_cnn_ip: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IP') }}"
+openwrt_bridge_interfaces: "{{ lookup('env', 'OPENWRT_BRIDGE_INTERFACES') | split(',') | map('trim') | list }}"
+openwrt_block_cnn_ipv4: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IPV4') | split(',') | map('trim') | list }}"
+openwrt_block_cnn_ipv6: "{{ lookup('env', 'OPENWRT_BLOCK_CNN_IPV6') | split(',') | map('trim') | list }}"

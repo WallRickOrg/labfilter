@@ -47,12 +47,14 @@ templates and local values before applying:
 ```sh
 ./scripts/ansible.sh ansible-playbook ansible/playbooks/apply.yml \
   -e openwrt_apply_confirmed=true \
-  -e openwrt_allow_local_access=true
+  -e openwrt_allow_local_access=true \
+  -e openwrt_allow_network_changes=true
 ```
 
 The apply playbook requires both `openwrt_apply_confirmed=true` and
-`openwrt_allow_local_access=true`. It refuses network or firewall changes unless
-the corresponding explicit safety flag and management-address guard are set.
+`openwrt_allow_local_access=true`. It also requires
+`openwrt_allow_network_changes=true` for this firewall change, and refuses
+protected changes unless the management-address guard is present.
 Review the playbook and desired-state lists before applying. These playbooks
 use OpenWrt's `raw` interface because the router may not have Python, so do not
 rely on Ansible check mode as a substitute for that review:
@@ -71,6 +73,8 @@ the repository.
 - `ansible/playbooks/discover.yml`: read-only live-state capture with redaction.
 - `ansible/playbooks/apply.yml`: guarded UCI and service application.
 - `ansible/templates/uci/`: current non-secret UCI package templates.
+- `ansible/templates/nft/`: bridge-family nftables policies for transparent
+  forwarding.
 - `ansible/inventory/hosts.yml`: inventory whose host comes from `.env`.
 - `ansible/vars/openwrt.yml`: tracked, non-secret desired-state data.
 - `scripts/ansible.sh`: safe `.env` loading and temporary-key handling.

@@ -1,5 +1,8 @@
 # Reproduces the verified zones, forwarding, and explicitly configured rules.
 config defaults
+	# Keep firewall4's standard nftables.d pre-table includes enabled. The
+	# bridge-family policy is loaded from that include location.
+	option auto_includes '1'
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
@@ -30,7 +33,12 @@ config forwarding
 config rule
 	option name '{{ openwrt_block_rule_name }}'
 	option dest 'wan'
-	list dest_ip '{{ openwrt_block_cnn_ip }}'
+	{% for address in openwrt_block_cnn_ipv4 %}
+	list dest_ip '{{ address }}'
+	{% endfor %}
+	{% for address in openwrt_block_cnn_ipv6 %}
+	list dest_ip '{{ address }}'
+	{% endfor %}
 	option target 'REJECT'
 	option src 'lan'
 	list proto 'all'
