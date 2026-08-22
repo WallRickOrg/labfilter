@@ -100,7 +100,7 @@
     - name: Install required OpenWrt packages
       # The bridge-family nftables hook needs the kernel bridge expression
       # module; package installation is kept in the same guarded workflow.
-      ansible.builtin.raw: "/usr/bin/opkg install {{ item | quote }}"
+      ansible.builtin.raw: "opkg install {{ item | quote }}"
       loop: "{{ openwrt_packages }}"
       when: openwrt_packages | length > 0
 
