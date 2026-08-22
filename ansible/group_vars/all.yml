@@ -11,6 +11,8 @@ openwrt_reload_wireless: false
 # Package staging is opt-in so a generic inventory cannot download or install
 # software until a verified desired-state file supplies pinned package data.
 openwrt_packages: []
+# LuCI assets are opt-in so generic inventories cannot change the web UI.
+openwrt_luci_ui_templates: []
 
 # Applying changes is opt-in so an incomplete local checkout cannot alter the bridge.
 openwrt_apply_confirmed: false

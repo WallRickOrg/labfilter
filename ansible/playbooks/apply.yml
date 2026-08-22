@@ -28,6 +28,7 @@
         or ('firewall' in openwrt_config_templates)
         or ('wireless' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
+        or (openwrt_luci_ui_templates | length > 0)
         or (openwrt_uci_set | select('match', '^(network|firewall)\.') | list | length > 0)
         or (openwrt_uci_delete | select('match', '^(network|firewall)\.') | list | length > 0)
         or (openwrt_uci_add_list | select('match', '^(network|firewall)\.') | list | length > 0)
@@ -45,6 +46,7 @@
         or ('firewall' in openwrt_config_templates)
         or ('wireless' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
+        or (openwrt_luci_ui_templates | length > 0)
 
     - name: Confirm current local management access before protected changes
       ansible.builtin.raw: >-
@@ -56,6 +58,7 @@
         or ('firewall' in openwrt_config_templates)
         or ('wireless' in openwrt_config_templates)
         or (openwrt_nft_templates | length > 0)
+        or (openwrt_luci_ui_templates | length > 0)
 
     - name: Resolve fixed bridge-block hostnames on the controller
       # nftables matches addresses rather than DNS names. Resolve the tracked
@@ -235,6 +238,18 @@
       loop: "{{ openwrt_nft_templates }}"
       when: openwrt_nft_templates | length > 0
       no_log: true
+
+    - name: Install the LuCI bridge nftables editor
+      # LuCI's packaged Custom Rules link is hidden on this fw4-only image.
+      # These assets provide a dedicated visible editor without modifying
+      # package-owned LuCI files, so firmware upgrades retain their defaults.
+      ansible.builtin.raw: >-
+        mkdir -p {{ item.destination | dirname | quote }};
+        printf '%s' {{ lookup('template', playbook_dir + '/../templates/luci/' + item.source) | quote }} >
+        {{ item.destination | quote }};
+        chmod {{ item.mode | quote }} {{ item.destination | quote }}
+      loop: "{{ openwrt_luci_ui_templates }}"
+      when: openwrt_luci_ui_templates | length > 0
 
     - name: Set verified UCI values
       ansible.builtin.raw: "/sbin/uci set {{ item | quote }}"

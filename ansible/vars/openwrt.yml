@@ -52,6 +52,17 @@ openwrt_config_templates:
 openwrt_nft_templates:
   - bridge-filter
 
+# LuCI's stock Custom Rules menu is hidden on this fw4-only image by an obsolete
+# fw3 dependency. Install a dedicated editor that exposes the same managed
+# bridge-policy script and reminds users to synchronize UI changes to Ansible.
+openwrt_luci_ui_templates:
+  - source: bridge-nftables.js.j2
+    destination: /www/luci-static/resources/view/openwrt/bridge-nftables.js
+    mode: '0644'
+  - source: bridge-nftables.json.j2
+    destination: /usr/share/luci/menu.d/openwrt-bridge-nftables.json
+    mode: '0644'
+
 # Machine-specific values come from the ignored .env through the wrapper.
 openwrt_management_address: "{{ lookup('env', 'OPENWRT_MANAGEMENT_ADDRESS') }}"
 openwrt_management_interface: "{{ lookup('env', 'OPENWRT_MANAGEMENT_INTERFACE') }}"

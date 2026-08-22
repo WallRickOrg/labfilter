@@ -115,6 +115,13 @@ where its actual nftables commands are visible. Representing the policy as a
 routed Traffic Rule would still be misleading because that packet path bypasses
 the rule.
 
+The fw4-only LuCI package installed on this device hides its stock Custom Rules
+menu behind an obsolete fw3 dependency. Ansible installs a separate **Network →
+Bridge nftables Rules** menu entry that opens an editor for the same script.
+The user explicitly permits edits through this page; each edit restarts the
+firewall and must be copied back into the Ansible template before another
+managed apply, which otherwise replaces the script.
+
 The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
 nftables cannot match hostnames directly, so the controller resolves A and AAAA
 answers during every guarded apply and renders that single snapshot into the

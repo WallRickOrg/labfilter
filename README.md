@@ -87,6 +87,10 @@ Because transparent bridge forwarding bypasses LuCI's routed Traffic Rules,
 the policy is managed as a native firewall4 script include instead. Its actual
 nftables rules are visible at **Network → Firewall → Custom Rules**; see
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the packet-path limitation.
+On this fw4-only image, the packaged Custom Rules menu is hidden by an obsolete
+fw3 dependency. Ansible therefore installs **Network → Bridge nftables Rules**
+as a dedicated editor for the same script. Direct UI edits are permitted, but
+must be synchronized into the Ansible template before the next managed apply.
 The TCP 8006 bridge test exception is also fixed in tracked Ansible and contains
 no private backend address or `.env` configuration.
 
