@@ -143,19 +143,6 @@ config zone
 	option forward 'ACCEPT'
 	list network 'lanwifi'
 
-# The ISP router forwards TCP 8006 to OpenWrt's active upstream address. DNAT
-# it only to Proxmox; the source zone is externalized because the live eth0
-# path is currently classified as lan rather than the inactive wan interface.
-config redirect
-	option name 'Proxmox-Web-Forward'
-	option src '{{ openwrt_proxmox_source_zone }}'
-	option src_dip '{{ openwrt_management_address }}'
-	option src_dport '{{ openwrt_proxmox_web_port }}'
-	option dest 'lan'
-	option dest_ip '{{ openwrt_proxmox_address }}'
-	option dest_port '{{ openwrt_proxmox_web_port }}'
-	option proto 'tcp'
-
 config rule
 	option name 'ssh'
 	list proto 'tcp'

@@ -100,14 +100,11 @@ sets through the repository's Ansible variables and apply workflow when DNS
 answers change. Encrypted DNS and alternate hostnames require separate policy
 if they are in scope.
 
-The Proxmox ingress policy is intentionally narrow: the upstream router's
-forwarded TCP `OPENWRT_PROXMOX_WEB_PORT` traffic is DNATed from the active
-OpenWrt upstream address to `OPENWRT_PROXMOX_ADDRESS` (TCP 8006 in the current
-local policy). The current live eth0 path is classified in the `lan` firewall
-zone while the configured `wan` interface is down, so the source zone is an
-externalized policy value. Because the upstream and Proxmox addresses overlap,
-Ansible also installs a host route for the Proxmox address through `br-lan`.
-No general inbound port forwarding is enabled.
+The Proxmox ingress policy is intentionally narrow: the upstream router sends
+the original frame toward `OPENWRT_PROXMOX_ADDRESS`, and the inline OpenWrt
+bridge permits `OPENWRT_PROXMOX_WEB_PORT` at its bridge-family forwarding hook.
+OpenWrt does not DNAT this traffic and does not install a host route for it;
+both would incorrectly treat a transparent Layer 2 path as routed traffic.
 
 ## Current gaps requiring explicit resolution
 
@@ -123,12 +120,10 @@ The live state does not yet implement the stated intent:
 5. The bridge filter has been represented in Ansible but has not been applied
    or demonstrated by a live packet-path test; the current UCI zone names are
    not evidence that transparent forwarding is filtered.
-6. The current live firewall has no DNAT/port-forward for the upstream router's
-   TCP 8006 traffic to Proxmox; the previously applied Wi-Fi allow rule does
-   not represent this path.
-7. The live route table currently prefers eth0 for the Proxmox address and ARP
-   fails there; the desired state must install a specific bridge-side host
-   route before the DNAT can reach the backend.
+6. The bridge-family Proxmox allow is represented in Ansible but cannot be
+   loaded until the bridge nftables kernel dependency is installed. The live
+   bridge currently has an accept policy, so this missing explicit rule is not
+   the cause of the present Proxmox connectivity failure.
 
 ## Ansible implementation invariants
 

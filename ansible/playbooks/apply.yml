@@ -78,7 +78,6 @@
           - openwrt_proxmox_web_port is match('^[0-9]+$')
           - openwrt_proxmox_web_port | int > 0
           - openwrt_proxmox_web_port | int < 65536
-          - openwrt_proxmox_source_zone is match('^[A-Za-z0-9_-]+$')
         fail_msg: >-
           One or more required host-specific or secret template values are
           missing or invalid in the ignored .env.
@@ -155,23 +154,38 @@
       loop: "{{ openwrt_services_reload }}"
       when: openwrt_services_reload | length > 0
 
-    - name: Verify the Proxmox redirect is persisted and loaded for LuCI
+    - name: Verify the obsolete Proxmox redirect is absent
+      # Transparent bridge traffic retains the Proxmox destination and must not
+      # be translated as though it terminated on an OpenWrt routed interface.
       ansible.builtin.raw: >-
-        uci show firewall |
-        grep -F "name='Proxmox-Web-Forward'" &&
-        nft list chain inet fw4 dstnat_lan |
-        grep -F 'Proxmox-Web-Forward'
+        if uci show firewall | grep -F "name='Proxmox-Web-Forward'"; then
+          exit 1;
+        fi;
+        if nft list chain inet fw4 dstnat_lan 2>/dev/null |
+        grep -F 'Proxmox-Web-Forward'; then
+          exit 1;
+        fi
       changed_when: false
-      when:
-        - openwrt_proxmox_address | length > 0
-        - openwrt_proxmox_web_port | length > 0
 
-    - name: Verify the Proxmox host route uses the bridge side
+    - name: Verify the obsolete Proxmox host route is absent
+      # An unnumbered transparent bridge does not route to its downstream host;
+      # frames retain their original L2 path across the two member ports.
       ansible.builtin.raw: >-
-        ip -4 route get {{ openwrt_proxmox_address | quote }} |
-        grep -F -- 'dev br-lan'
+        if ip -4 route show exact {{ (openwrt_proxmox_address + '/32') | quote }}
+        dev br-lan | grep -q .; then
+          exit 1;
+        fi
       changed_when: false
       when: openwrt_proxmox_address | length > 0
+
+    - name: Verify the Proxmox bridge allow is loaded when deployed
+      # Bridge-family validation checks the hook that sees transparent frames;
+      # an inet fw4 or LuCI traffic rule would validate the wrong packet path.
+      ansible.builtin.raw: >-
+        nft list chain bridge openwrt_bridge_filter forward |
+        grep -F 'Proxmox-Web-Allow'
+      changed_when: false
+      when: "'bridge-filter' in openwrt_nft_templates"
 
     - name: Confirm the management address remains present after changes
       ansible.builtin.raw: >-

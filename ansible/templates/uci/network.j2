@@ -16,13 +16,6 @@ config interface 'lan'
 	option proto 'none'
 	option device 'br-lan'
 
-# The upstream and Proxmox addresses overlap numerically, so the specific host
-# route is required to send DNATed traffic to the transparent bridge ports.
-config route
-	option interface 'lan'
-	option target '{{ openwrt_proxmox_address }}'
-	option netmask '255.255.255.255'
-
 config interface 'wan'
 	option proto 'static'
 	option ipaddr '{{ openwrt_wan_ip }}'
