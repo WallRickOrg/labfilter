@@ -1,24 +1,24 @@
 ---
 # These empty lists make an undiscovered configuration a safe no-op.
-openwrt_uci_set: []
-openwrt_uci_delete: []
-openwrt_uci_add_list: []
-openwrt_uci_commit: []
-openwrt_services_reload: []
+labfilter_uci_set: []
+labfilter_uci_delete: []
+labfilter_uci_add_list: []
+labfilter_uci_commit: []
+labfilter_services_reload: []
 # Wireless process recovery is opt-in so generic inventories cannot disrupt a
 # radio unless verified desired-state variables explicitly enable it.
-openwrt_reload_wireless: false
+labfilter_reload_wireless: false
 # Package staging is opt-in so a generic inventory cannot download or install
 # software until a verified desired-state file supplies pinned package data.
-openwrt_packages: []
+labfilter_packages: []
 # LuCI assets are opt-in so generic inventories cannot change the web UI.
-openwrt_luci_ui_templates: []
+labfilter_luci_ui_templates: []
 
 # Applying changes is opt-in so an incomplete local checkout cannot alter the bridge.
-openwrt_apply_confirmed: false
-openwrt_allow_local_access: false
+labfilter_apply_confirmed: false
+labfilter_allow_local_access: false
 
 # Network and firewall changes require a separate explicit guard.
-openwrt_allow_network_changes: false
-openwrt_management_address: ""
-openwrt_management_interface: ""
+labfilter_allow_network_changes: false
+labfilter_management_address: ""
+labfilter_management_interface: ""

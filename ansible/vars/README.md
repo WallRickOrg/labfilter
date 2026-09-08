@@ -1,6 +1,6 @@
-# OpenWrt desired state
+# Labfilter desired state
 
-`openwrt.yml` is the tracked, non-secret desired-state entry point. Populate it
+`labfilter.yml` is the tracked, non-secret desired-state entry point. Populate it
 only after reviewing a successful local discovery report. Put machine-specific
 or secret overrides in an ignored `*.local.yml` file and pass it explicitly to
 Ansible when needed.

@@ -1,6 +1,6 @@
-# OpenWrt configuration management
+# Labfilter configuration management
 
-This repository is the reproducible management surface for the home OpenWrt
+Labfilter is the reproducible management surface for the home OpenWrt
 instance. Ansible connects over SSH and uses OpenWrt's native `uci` and service
 commands, so the playbooks do not require Python to be installed on the router.
 
@@ -12,7 +12,7 @@ before and after any future configuration change.
 
 - Ansible Core on the management machine.
 - A local `.env` copied from `.env.example`.
-- An SSH private key encoded as base64 in `OPENWRT_PRIVATE_KEY_BASE64`.
+- An SSH private key encoded as base64 in `LABFILTER_PRIVATE_KEY_BASE64`.
 - A route from the management machine to the OpenWrt host.
 
 The repository does not contain the live endpoint or key. The existing local
@@ -51,14 +51,14 @@ templates and local values before applying:
 
 ```sh
 ./scripts/ansible.sh ansible-playbook ansible/playbooks/apply.yml \
-  -e openwrt_apply_confirmed=true \
-  -e openwrt_allow_local_access=true \
-  -e openwrt_allow_network_changes=true
+  -e labfilter_apply_confirmed=true \
+  -e labfilter_allow_local_access=true \
+  -e labfilter_allow_network_changes=true
 ```
 
-The apply playbook requires both `openwrt_apply_confirmed=true` and
-`openwrt_allow_local_access=true`. It also requires
-`openwrt_allow_network_changes=true` for this firewall change, and refuses
+The apply playbook requires both `labfilter_apply_confirmed=true` and
+`labfilter_allow_local_access=true`. It also requires
+`labfilter_allow_network_changes=true` for this firewall change, and refuses
 protected changes unless the management-address guard is present.
 Review the playbook and desired-state lists before applying. These playbooks
 use OpenWrt's `raw` interface because the router may not have Python, so do not
@@ -72,7 +72,7 @@ The wrapper creates a temporary key file from the base64 value, uses it for the
 Ansible process, and removes it on exit. It never writes the decoded key into
 the repository.
 
-Kernel packages are checksum-pinned in `ansible/vars/openwrt.yml`. Because the
+Kernel packages are checksum-pinned in `ansible/vars/labfilter.yml`. Because the
 router management path cannot reach package feeds, Ansible downloads them to a
 private controller temporary directory, transfers them over the same SSH
 connection, verifies them again on OpenWrt, and removes both staged copies.
@@ -105,7 +105,7 @@ no private backend address or `.env` configuration.
 - `ansible/templates/nft/`: bridge-family nftables policies for transparent
   forwarding.
 - `ansible/inventory/hosts.yml`: inventory whose host comes from `.env`.
-- `ansible/vars/openwrt.yml`: tracked, non-secret desired-state data.
+- `ansible/vars/labfilter.yml`: tracked, non-secret desired-state data.
 - `scripts/ansible.sh`: safe `.env` loading and temporary-key handling.
 - `artifacts/` and `backups/`: ignored local runtime outputs.
 

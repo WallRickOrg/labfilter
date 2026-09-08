@@ -1,4 +1,4 @@
-# OpenWrt network architecture
+# Labfilter network architecture
 
 Status: verified topology and intended security policy. This document records
 the design boundary; it does not authorize a live firewall or network change.
@@ -7,7 +7,7 @@ the guarded Ansible workflow.
 
 ## Purpose
 
-OpenWrt is an inline device between the home lab and an upstream route to the
+Labfilter is an inline device between the home lab and an upstream route to the
 internet. It has three distinct security planes:
 
 1. A management plane on `eth0`.
@@ -50,8 +50,8 @@ wired management remains the independent recovery path.
 
 - The management service must be reachable on the user-approved SSH port,
   currently described as TCP port 21, from the approved source CIDR stored in
-  `OPENWRT_MANAGEMENT_ALLOWED_SOURCE_CIDR`.
-- Traffic from `OPENWRT_GATEWAY_ADDRESS` must be explicitly rejected before the
+  `LABFILTER_MANAGEMENT_ALLOWED_SOURCE_CIDR`.
+- Traffic from `LABFILTER_GATEWAY_ADDRESS` must be explicitly rejected before the
   broader source allow rule. The gateway address must be populated and verified
   before implementing this rule; it must not be inferred from the source CIDR.
 - The destination of this rule must be the management address on `eth0`, never
@@ -65,7 +65,7 @@ wired management remains the independent recovery path.
 - The wireless station is an untrusted DMZ-side ingress, not a trusted LAN.
 - Only TCP ports 21, 80, and 443 may be accepted to the OpenWrt device from the
   DMZ policy source. The policy is represented by
-  `OPENWRT_DMZ_ALLOWED_TCP_PORTS` and defaults conceptually to `21,80,443`.
+  `LABFILTER_DMZ_ALLOWED_TCP_PORTS` and defaults conceptually to `21,80,443`.
 - All other input from the DMZ must be rejected. Output may remain allowed for
   the device's upstream operation, but forwarding must be explicitly defined
   rather than inherited from an ACCEPT-all zone.
