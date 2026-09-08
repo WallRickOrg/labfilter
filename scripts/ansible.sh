@@ -17,18 +17,18 @@ set -a
 set +a
 
 # Validate required names without printing their values or the decoded private key.
-: "${OPENWRT_HOST:?OPENWRT_HOST is required in .env}"
-: "${OPENWRT_PRIVATE_KEY_BASE64:?OPENWRT_PRIVATE_KEY_BASE64 is required in .env}"
+: "${LABFILTER_HOST:?LABFILTER_HOST is required in .env}"
+: "${LABFILTER_PRIVATE_KEY_BASE64:?LABFILTER_PRIVATE_KEY_BASE64 is required in .env}"
 
 # Decode the key only into a private temporary file for this child process.
 key_dir=$(mktemp -d)
-key_file="$key_dir/openwrt"
+key_file="$key_dir/labfilter"
 cleanup() {
     rm -f "$key_file"
     rmdir "$key_dir" 2>/dev/null || true
 }
 trap cleanup EXIT HUP INT TERM
-printf '%s' "$OPENWRT_PRIVATE_KEY_BASE64" | base64 --decode > "$key_file"
+printf '%s' "$LABFILTER_PRIVATE_KEY_BASE64" | base64 --decode > "$key_file"
 chmod 600 "$key_file"
 
 # Keep Ansible pointed at the repository inventory and temporary key.

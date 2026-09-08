@@ -8,10 +8,10 @@ config wifi-device 'radio0'
 
 # This is a station rather than an access point; the SSID and key come only
 # from the ignored local environment at render time.
-config wifi-iface '{{ openwrt_wifi_station_section }}'
+config wifi-iface '{{ labfilter_wifi_station_section }}'
 	option device 'radio0'
 	option mode 'sta'
-	option network '{{ openwrt_wifi_network_name }}'
-	option ssid '{{ openwrt_lanwifi_ssid }}'
+	option network '{{ labfilter_wifi_network_name }}'
+	option ssid '{{ labfilter_lanwifi_ssid }}'
 	option encryption 'psk2'
-	option key '{{ openwrt_lanwifi_psk }}'
+	option key '{{ labfilter_lanwifi_psk }}'

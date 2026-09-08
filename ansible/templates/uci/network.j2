@@ -6,7 +6,7 @@ config interface 'loopback'
 	option netmask '255.0.0.0'
 
 config globals 'globals'
-	option ula_prefix '{{ openwrt_ula_prefix }}'
+	option ula_prefix '{{ labfilter_ula_prefix }}'
 	option packet_steering '1'
 
 # Preserve the pre-existing wireless DHCP network so the LAN zone's current
@@ -15,7 +15,7 @@ config interface 'openwrtwifi'
 	option proto 'dhcp'
 
 # The manually repaired station attaches to this DHCP client network.
-config interface '{{ openwrt_wifi_network_name }}'
+config interface '{{ labfilter_wifi_network_name }}'
 	option proto 'dhcp'
 
 config interface 'lan'
@@ -24,7 +24,7 @@ config interface 'lan'
 
 config interface 'wan'
 	option proto 'static'
-	option ipaddr '{{ openwrt_wan_ip }}'
+	option ipaddr '{{ labfilter_wan_ip }}'
 	option netmask '255.255.255.0'
 	option ip6assign '60'
 
@@ -42,4 +42,4 @@ config switch
 config interface 'management'
 	option proto 'dhcp'
 	option device 'eth0'
-	option hostname '{{ openwrt_device_hostname }}'
+	option hostname '{{ labfilter_device_hostname }}'

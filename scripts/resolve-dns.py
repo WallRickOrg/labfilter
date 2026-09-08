@@ -21,7 +21,7 @@ def resolve(hostname: str, record_type: str) -> set[str]:
     query = urllib.parse.urlencode({"name": hostname, "type": record_type})
     request = urllib.request.Request(
         f"{DOH_ENDPOINT}?{query}",
-        headers={"Accept": "application/dns-json", "User-Agent": "openwrt-ansible"},
+        headers={"Accept": "application/dns-json", "User-Agent": "labfilter-ansible"},
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         payload = json.load(response)

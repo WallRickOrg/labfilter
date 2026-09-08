@@ -9,7 +9,7 @@ config defaults
 
 # Register the bridge policy through firewall4's supported script include.
 # LuCI exposes this managed file at Network → Firewall → Custom Rules.
-config include 'openwrt_bridge_filter'
+config include 'labfilter_bridge_filter'
 	option enabled '1'
 	option type 'script'
 	option path '/etc/firewall.user'
@@ -25,7 +25,7 @@ config zone
 	# Keep both discovered wireless DHCP networks inside the locally managed
 	# LAN zone so the repaired station retains local administrative access.
 	list network 'openwrtwifi'
-	list network '{{ openwrt_wifi_network_name }}'
+	list network '{{ labfilter_wifi_network_name }}'
 
 config zone
 	option name 'wan'
@@ -144,9 +144,9 @@ config rule
 	option name 'ssh'
 	list proto 'tcp'
 	option src '*'
-	list src_ip '{{ openwrt_management_cidr }}'
-	list src_ip '{{ openwrt_upstream_cidr }}'
+	list src_ip '{{ labfilter_management_cidr }}'
+	list src_ip '{{ labfilter_upstream_cidr }}'
 	option dest '*'
-	list dest_ip '{{ openwrt_upstream_address }}'
+	list dest_ip '{{ labfilter_upstream_address }}'
 	option dest_port '21'
 	option target 'ACCEPT'
