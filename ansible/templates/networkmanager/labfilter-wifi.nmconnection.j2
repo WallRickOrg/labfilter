@@ -1,0 +1,22 @@
+# Managed by Labfilter Ansible. The SSID and PSK remain in ignored `.env`.
+[connection]
+id={{ labfilter_wifi_connection_name }}
+type=wifi
+interface-name={{ labfilter_wifi_interface }}
+autoconnect=true
+
+[wifi]
+mode=infrastructure
+ssid={{ labfilter_wifi_ssid }}
+hidden=false
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk={{ labfilter_wifi_psk }}
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto

@@ -1,0 +1,19 @@
+#!/usr/sbin/nft -f
+
+# Observed baseline: nftables is installed but disabled and no filtering policy
+# is active. The future bridge policy must be modeled and reviewed separately.
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter;
+    }
+
+    chain forward {
+        type filter hook forward priority filter;
+    }
+
+    chain output {
+        type filter hook output priority filter;
+    }
+}

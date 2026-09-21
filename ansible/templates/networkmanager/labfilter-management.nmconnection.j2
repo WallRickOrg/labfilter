@@ -1,0 +1,15 @@
+# Managed by Labfilter Ansible. This DHCP profile preserves the independent
+# wired management path without assigning a private address in Git.
+[connection]
+id={{ labfilter_management_connection_name }}
+type=802-3-ethernet
+interface-name={{ labfilter_management_interface }}
+autoconnect=true
+autoconnect-priority=100
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto

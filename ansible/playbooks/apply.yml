@@ -1,7 +1,10 @@
 ---
-- name: Apply guarded Labfilter configuration
+# This playbook recreates the observed Debian-based Raspberry Pi baseline. It
+# never creates or changes the future inline bridge without a separate review.
+- name: Apply guarded Labfilter baseline
   hosts: labfilter
-  gather_facts: false
+  gather_facts: true
+  become: true
   vars_files:
     - ../vars/labfilter.yml
   pre_tasks:
@@ -10,384 +13,116 @@
         that:
           - labfilter_apply_confirmed | bool
           - labfilter_allow_local_access | bool
-        fail_msg: >-
-          Refusing to apply: set both labfilter_apply_confirmed=true and
-          labfilter_allow_local_access=true after reviewing the change.
-
-    - name: Refuse unguarded network or firewall changes
-      ansible.builtin.assert:
-        that:
           - labfilter_allow_network_changes | bool
-          - labfilter_management_address | length > 0
-          - labfilter_management_interface | length > 0
         fail_msg: >-
-          Network/firewall changes require labfilter_allow_network_changes=true,
-          labfilter_management_address, and labfilter_management_interface.
-      when: >-
-        ('network' in labfilter_config_templates)
-        or ('firewall' in labfilter_config_templates)
-        or ('wireless' in labfilter_config_templates)
-        or (labfilter_nft_templates | length > 0)
-        or (labfilter_luci_ui_templates | length > 0)
-        or (labfilter_uci_set | select('match', '^(network|firewall)\.') | list | length > 0)
-        or (labfilter_uci_delete | select('match', '^(network|firewall)\.') | list | length > 0)
-        or (labfilter_uci_add_list | select('match', '^(network|firewall)\.') | list | length > 0)
+          Refusing to apply: set labfilter_apply_confirmed=true,
+          labfilter_allow_local_access=true, and
+          labfilter_allow_network_changes=true after reviewing the change.
 
-    - name: Require the local management address guard for protected templates
+    - name: Require the discovered Debian platform
+      ansible.builtin.assert:
+        that:
+          - ansible_os_family == 'Debian'
+        fail_msg: This desired state is for the discovered Debian-based Labfilter.
+
+    - name: Require externalized management and Wi-Fi inputs
       ansible.builtin.assert:
         that:
           - labfilter_management_address | length > 0
           - labfilter_management_interface | length > 0
+          - labfilter_wifi_interface | length > 0
+          - labfilter_wifi_ssid | length > 0
+          - labfilter_wifi_psk | length > 0
         fail_msg: >-
-          The live network/firewall templates require LABFILTER_MANAGEMENT_ADDRESS
-          and LABFILTER_MANAGEMENT_INTERFACE in the ignored .env.
-      when: >-
-        ('network' in labfilter_config_templates)
-        or ('firewall' in labfilter_config_templates)
-        or ('wireless' in labfilter_config_templates)
-        or (labfilter_nft_templates | length > 0)
-        or (labfilter_luci_ui_templates | length > 0)
+          LABFILTER_MANAGEMENT_ADDRESS, LABFILTER_MANAGEMENT_INTERFACE,
+          LABFILTER_WIFI_INTERFACE, LABFILTER_WIFI_SSID, and
+          LABFILTER_WIFI_PSK_BASE64 must be set in the ignored .env.
+      no_log: true
 
-    - name: Confirm current local management access before protected changes
-      ansible.builtin.raw: >-
-        /sbin/ip -4 addr show dev {{ labfilter_management_interface | quote }} |
-        grep -F -- {{ labfilter_management_address | quote }} > /dev/null
-      changed_when: false
-      when: >-
-        ('network' in labfilter_config_templates)
-        or ('firewall' in labfilter_config_templates)
-        or ('wireless' in labfilter_config_templates)
-        or (labfilter_nft_templates | length > 0)
-        or (labfilter_luci_ui_templates | length > 0)
-
-    - name: Resolve fixed bridge-block hostnames on the controller
-      # nftables matches addresses rather than DNS names. Resolve the tracked
-      # test hostnames once so one consistent A/AAAA snapshot drives this apply.
+    - name: Confirm local management access before protected changes
       ansible.builtin.command:
-        argv: "{{ [ansible_playbook_python, playbook_dir + '/../../scripts/resolve-dns.py'] + labfilter_block_domains }}"
-      register: labfilter_block_dns
+        argv:
+          - ip
+          - -4
+          - address
+          - show
+          - dev
+          - "{{ labfilter_management_interface }}"
+      register: labfilter_management_before
       changed_when: false
-      delegate_to: localhost
-      become: false
-      when: "'bridge-filter' in labfilter_nft_templates"
-
-    - name: Use the resolved hostname addresses for the bridge sets
-      # Facts replace the empty defaults before template rendering and all
-      # existing validation, upload, and post-apply checks consume these lists.
-      ansible.builtin.set_fact:
-        labfilter_block_cnn_ipv4: "{{ (labfilter_block_dns.stdout | from_json).ipv4 }}"
-        labfilter_block_cnn_ipv6: "{{ (labfilter_block_dns.stdout | from_json).ipv6 }}"
-      when: "'bridge-filter' in labfilter_nft_templates"
-
-    - name: Require externalized values needed by the reproduced templates
-      ansible.builtin.assert:
-        that:
-          - labfilter_device_hostname | length > 0
-          - labfilter_ula_prefix | length > 0
-          - labfilter_wan_ip | length > 0
-          - labfilter_management_cidr | length > 0
-          - labfilter_upstream_cidr | length > 0
-          - labfilter_upstream_address | length > 0
-          - labfilter_lanwifi_ssid | length > 0
-          - labfilter_lanwifi_psk | length > 0
-          - labfilter_rpcd_password | length > 0
-        fail_msg: >-
-          One or more required host-specific or secret template values are
-          missing or invalid in the ignored .env.
-      when: labfilter_config_templates | length > 0
-
-    - name: Require validated bridge-filter inputs
-      # Keep bridge-only checks independent so a wireless-only recovery does
-      # not need DNS-derived nftables values or package deployment.
-      ansible.builtin.assert:
-        that:
-          - labfilter_block_rule_name | length > 0
-          - labfilter_block_rule_name is match('^[A-Za-z0-9 _-]+$')
-          - labfilter_bridge_interfaces | length == 2
-          - labfilter_bridge_interfaces | select('match', '^[A-Za-z0-9_.:-]+$') | list | length == labfilter_bridge_interfaces | length
-          - (labfilter_block_cnn_ipv4 | length) + (labfilter_block_cnn_ipv6 | length) > 0
-          - labfilter_block_cnn_ipv4 | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | list | length == labfilter_block_cnn_ipv4 | length
-          - labfilter_block_cnn_ipv6 | select('match', '^[0-9A-Fa-f:]+$') | list | length == labfilter_block_cnn_ipv6 | length
-        fail_msg: >-
-          Refusing to apply: bridge interfaces or resolved block addresses are
-          missing or invalid.
-      when: "'bridge-filter' in labfilter_nft_templates"
-
-    - name: Verify UCI is available before changing state
-      ansible.builtin.raw: "test -x /sbin/uci"
-      changed_when: false
-
-    - name: Save a remote backup before applying configuration
-      ansible.builtin.raw: >-
-        backup="/tmp/labfilter-ansible-backup-$(date +%Y%m%d%H%M%S).tar.gz";
-        tar -czf "$backup" /etc/config;
-        printf '%s' "$backup"
-      register: labfilter_backup
-      changed_when: true
+      failed_when: labfilter_management_address not in labfilter_management_before.stdout
+      check_mode: false
       no_log: true
 
   tasks:
-    - name: Stage verified OpenWrt packages through the controller
-      # The router has no outbound feed access, so the controller downloads the
-      # exact kernel-matched package and transfers it over the guarded SSH path.
-      block:
-        - name: Create a private controller package directory
-          ansible.builtin.tempfile:
-            state: directory
-            prefix: labfilter-packages-
-          register: labfilter_package_stage
-          delegate_to: localhost
-          become: false
+    - name: Install the observed Labfilter package baseline
+      ansible.builtin.apt:
+        name: "{{ labfilter_packages }}"
+        state: present
+        update_cache: false
 
-        - name: Download checksum-pinned OpenWrt packages
-          ansible.builtin.get_url:
-            url: "{{ item.url | regex_replace('\\s+', '') }}"
-            dest: "{{ labfilter_package_stage.path }}/{{ item.filename }}"
-            checksum: "sha256:{{ item.sha256 }}"
-            mode: "0600"
-          loop: "{{ labfilter_packages }}"
-          delegate_to: localhost
-          become: false
+    - name: Create the protected NetworkManager connection directory
+      ansible.builtin.file:
+        path: /etc/NetworkManager/system-connections
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
 
-        - name: Upload packages with the OpenWrt-compatible SCP protocol
-          # Dropbear exposes legacy SCP but not an SFTP subsystem; forcing SCP
-          # keeps binary transfer independent of Python on the target.
-          ansible.builtin.command:
-            argv:
-              - scp
-              - -O
-              - -P
-              - "{{ ansible_port | default(22) | string }}"
-              - -i
-              - "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY_FILE') }}"
-              - -o
-              - BatchMode=yes
-              - -o
-              - IdentitiesOnly=yes
-              - -o
-              - StrictHostKeyChecking=yes
-              - "{{ labfilter_package_stage.path }}/{{ item.filename }}"
-              - "{{ ansible_user }}@{{ ansible_host }}:/tmp/{{ item.filename }}"
-          loop: "{{ labfilter_packages }}"
-          delegate_to: localhost
-          become: false
-          no_log: true
+    - name: Install the DHCP management Ethernet profile
+      # This profile mirrors the live DHCP management connection. It is loaded
+      # but not explicitly activated, avoiding an avoidable SSH interruption.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/networkmanager/labfilter-management.nmconnection.j2"
+        dest: /etc/NetworkManager/system-connections/labfilter-management.nmconnection
+        owner: root
+        group: root
+        mode: '0600'
 
-        - name: Verify uploaded package checksums on OpenWrt
-          ansible.builtin.raw: >-
-            echo {{ item.sha256 | quote }} /tmp/{{ item.filename | quote }} |
-            sha256sum -c -
-          loop: "{{ labfilter_packages }}"
-          changed_when: false
-
-        - name: Install required OpenWrt packages from local staging
-          # opkg still validates the package architecture and exact running
-          # kernel dependency before installing the bridge-family module.
-          ansible.builtin.raw: >-
-            if opkg status {{ item.name | quote }} 2>/dev/null |
-            grep -q 'Status:.*installed'; then
-              printf '%s\n' already-installed;
-            else
-              opkg install /tmp/{{ item.filename | quote }};
-            fi
-          loop: "{{ labfilter_packages }}"
-          register: labfilter_package_install
-          # During a loop Ansible may expose the aggregate register before an
-          # item result; defaulting stdout keeps status reporting deterministic.
-          changed_when: >-
-            'already-installed' not in
-            (labfilter_package_install.stdout | default(''))
-      always:
-        - name: Remove staged packages from OpenWrt
-          # Package files are transient controller inputs, not router desired
-          # state, so remove only the explicitly pinned staging paths.
-          ansible.builtin.raw: "rm -f /tmp/{{ item.filename | quote }}"
-          loop: "{{ labfilter_packages }}"
-          changed_when: false
-
-        - name: Remove the private controller package directory
-          ansible.builtin.file:
-            path: "{{ labfilter_package_stage.path }}"
-            state: absent
-          delegate_to: localhost
-          become: false
-          when:
-            - labfilter_package_stage is defined
-            - labfilter_package_stage.path is defined
-      when: labfilter_packages | length > 0
-
-    - name: Render and upload verified UCI configuration templates
-      # The target image does not provide base64; shell quoting keeps the
-      # rendered content intact while still avoiding an intermediate file.
-      ansible.builtin.raw: >-
-        printf '%s' {{ lookup('template', playbook_dir + '/../templates/uci/' + item + '.j2') | quote }} >
-        /etc/config/{{ item | quote }}
-      loop: "{{ labfilter_config_templates }}"
-      when: labfilter_config_templates | length > 0
+    - name: Install the Wi-Fi station profile
+      # The rendered keyfile contains the externalized PSK and is never logged.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/networkmanager/labfilter-wifi.nmconnection.j2"
+        dest: /etc/NetworkManager/system-connections/labfilter-wifi.nmconnection
+        owner: root
+        group: root
+        mode: '0600'
       no_log: true
 
-    - name: Render the bridge-family policy into LuCI Custom Rules
-      # firewall4 executes /etc/firewall.user through the named UCI include.
-      # This keeps the actual nftables bridge policy visible in LuCI while the
-      # bridge hook continues to enforce transparent forwarding.
-      ansible.builtin.raw: >-
-        rm -f /usr/share/nftables.d/ruleset-pre/99-labfilter-{{ item }}.nft;
-        printf '%s' {{ lookup('template', playbook_dir + '/../templates/nft/' + item + '.nft.j2') | quote }} >
-        /etc/firewall.user;
-        chmod 0700 /etc/firewall.user
-      loop: "{{ labfilter_nft_templates }}"
-      when: labfilter_nft_templates | length > 0
+    - name: Reload NetworkManager connection profiles without reconnecting links
+      ansible.builtin.command:
+        argv:
+          - nmcli
+          - connection
+          - reload
+      changed_when: false
+
+    - name: Preserve the observed inactive nftables service state
+      ansible.builtin.systemd_service:
+        name: nftables
+        enabled: "{{ labfilter_nftables_enabled }}"
+        state: "{{ 'started' if labfilter_nftables_enabled else 'stopped' }}"
+
+    - name: Install the observed empty nftables configuration
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/nftables.conf.j2"
+        dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+  post_tasks:
+    - name: Confirm local management access remains present
+      ansible.builtin.command:
+        argv:
+          - ip
+          - -4
+          - address
+          - show
+          - dev
+          - "{{ labfilter_management_interface }}"
+      register: labfilter_management_after
+      changed_when: false
+      failed_when: labfilter_management_address not in labfilter_management_after.stdout
+      check_mode: false
       no_log: true
-
-    - name: Install the LuCI bridge nftables editor
-      # LuCI's packaged Custom Rules link is hidden on this fw4-only image.
-      # These assets provide a dedicated visible editor without modifying
-      # package-owned LuCI files, so firmware upgrades retain their defaults.
-      ansible.builtin.raw: >-
-        mkdir -p {{ item.destination | dirname | quote }};
-        printf '%s' {{ lookup('template', playbook_dir + '/../templates/luci/' + item.source) | quote }} >
-        {{ item.destination | quote }};
-        chmod {{ item.mode | quote }} {{ item.destination | quote }}
-      loop: "{{ labfilter_luci_ui_templates }}"
-      when: labfilter_luci_ui_templates | length > 0
-
-    - name: Invalidate the LuCI menu index after installing UI assets
-      # LuCI caches discovered menu definitions under /tmp. Without removing
-      # this narrow cache entry, a newly installed menu route remains invisible
-      # until its prior cache expires or the device is restarted.
-      ansible.builtin.raw: "rm -f /tmp/luci-indexcache.*"
-      when: labfilter_luci_ui_templates | length > 0
-
-    - name: Set verified UCI values
-      ansible.builtin.raw: "/sbin/uci set {{ item | quote }}"
-      loop: "{{ labfilter_uci_set }}"
-      when: labfilter_uci_set | length > 0
-
-    - name: Delete verified UCI values
-      ansible.builtin.raw: "/sbin/uci delete {{ item | quote }}"
-      loop: "{{ labfilter_uci_delete }}"
-      when: labfilter_uci_delete | length > 0
-
-    - name: Add verified UCI list values
-      ansible.builtin.raw: "/sbin/uci add_list {{ item | quote }}"
-      loop: "{{ labfilter_uci_add_list }}"
-      when: labfilter_uci_add_list | length > 0
-
-    - name: Commit only the explicitly listed UCI configuration files
-      ansible.builtin.raw: "/sbin/uci commit {{ item | quote }}"
-      loop: "{{ labfilter_uci_commit }}"
-      when: labfilter_uci_commit | length > 0
-
-    - name: Reload only the explicitly listed services
-      ansible.builtin.raw: "/etc/init.d/{{ item | quote }} reload"
-      loop: "{{ labfilter_services_reload }}"
-      when: labfilter_services_reload | length > 0
-
-    - name: Restart firewall after updating the LuCI-visible bridge policy
-      # The documented bridge include is a firewall script, so restart fw4 to
-      # execute it after the old automatic include has been removed.
-      ansible.builtin.raw: "/etc/init.d/firewall restart"
-      when: "'bridge-filter' in labfilter_nft_templates"
-
-    - name: Verify the rendered wireless credentials are persisted
-      # Compare on the router under no_log so neither the tracked SSID variable
-      # nor decoded password can appear in task output or controller logs.
-      ansible.builtin.raw: >-
-        test "$(uci -q get wireless.{{ labfilter_wifi_station_section }}.mode)" = sta;
-        test "$(uci -q get wireless.{{ labfilter_wifi_station_section }}.network)" =
-        {{ labfilter_wifi_network_name | quote }};
-        test "$(uci -q get wireless.{{ labfilter_wifi_station_section }}.ssid)" =
-        {{ labfilter_lanwifi_ssid | quote }};
-        test "$(uci -q get wireless.{{ labfilter_wifi_station_section }}.key)" =
-        {{ labfilter_lanwifi_psk | quote }}
-      changed_when: false
-      no_log: true
-      when:
-        - labfilter_reload_wireless | bool
-        - "'wireless' in labfilter_config_templates"
-
-    - name: Reload the managed wireless station
-      # The Broadcom station reconnects reliably through OpenWrt's normal
-      # wireless reload. Avoid a destructive wpad restart, which drops an
-      # established station into an unrecoverable scheduled-scan loop.
-      ansible.builtin.raw: >-
-        /sbin/wifi reload
-      when:
-        - labfilter_reload_wireless | bool
-        - "'wireless' in labfilter_config_templates"
-
-    - name: Wait for wireless association and DHCP
-      # Do not report a successful apply until the station is associated and
-      # the configured wireless DHCP network has regained an IPv4 address.
-      ansible.builtin.raw: >-
-        attempt=0;
-        while [ "$attempt" -lt 30 ]; do
-          device="$(ubus call network.interface.{{ labfilter_wifi_network_name }} status |
-          jsonfilter -e '@.l3_device' 2>/dev/null || true)";
-          if [ -n "$device" ] &&
-          ubus call network.interface.{{ labfilter_wifi_network_name }} status |
-          jsonfilter -e '@.up' | grep -qx true &&
-          /sbin/ip -4 -o addr show dev "$device" | grep -q ' inet '; then
-            exit 0;
-          fi;
-          attempt=$((attempt + 1));
-          sleep 2;
-        done;
-        exit 1
-      changed_when: false
-      when:
-        - labfilter_reload_wireless | bool
-        - "'wireless' in labfilter_config_templates"
-
-    - name: Verify the obsolete Proxmox redirect is absent
-      # Transparent bridge traffic retains the Proxmox destination and must not
-      # be translated as though it terminated on an OpenWrt routed interface.
-      ansible.builtin.raw: >-
-        if uci show firewall | grep -F "name='Proxmox-Web-Forward'"; then
-          exit 1;
-        fi;
-        if nft list chain inet fw4 dstnat_lan 2>/dev/null |
-        grep -F 'Proxmox-Web-Forward'; then
-          exit 1;
-        fi
-      changed_when: false
-
-    - name: Verify the static TCP 8006 bridge allow is loaded when deployed
-      # Bridge-family validation checks the hook that sees transparent frames;
-      # an inet fw4 or LuCI traffic rule would validate the wrong packet path.
-      ansible.builtin.raw: >-
-        nft list chain bridge labfilter_bridge_filter forward |
-        grep -F 'Allow-TCP-8006'
-      changed_when: false
-      when: "'bridge-filter' in labfilter_nft_templates"
-
-    - name: Verify Block CNN is enforced at the bridge hook
-      # The legacy LuCI traffic rule used the routed inet hook and was a false
-      # signal; validate the active L2 chain and every configured set element.
-      ansible.builtin.raw: >-
-        nft list chain bridge labfilter_bridge_filter forward |
-        grep -F {{ ('labfilter: ' + labfilter_block_rule_name) | quote }};
-        {% for address in labfilter_block_cnn_ipv4 %}
-        nft list set bridge labfilter_bridge_filter block_cnn_ipv4 |
-        grep -F {{ address | quote }};
-        {% endfor %}
-        {% for address in labfilter_block_cnn_ipv6 %}
-        nft list set bridge labfilter_bridge_filter block_cnn_ipv6 |
-        grep -F {{ address | quote }};
-        {% endfor %}
-        if uci show firewall |
-        grep -F {{ ("name='" + labfilter_block_rule_name + "'") | quote }}; then
-          exit 1;
-        fi
-      changed_when: false
-      when: "'bridge-filter' in labfilter_nft_templates"
-
-    - name: Confirm the management address remains present after changes
-      ansible.builtin.raw: >-
-        /sbin/ip -4 addr show dev {{ labfilter_management_interface | quote }} |
-        grep -F -- {{ labfilter_management_address | quote }} > /dev/null
-      changed_when: false
-      when:
-        - labfilter_allow_network_changes | bool
-        - labfilter_management_address | length > 0
-        - labfilter_management_interface | length > 0

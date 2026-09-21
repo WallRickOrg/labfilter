@@ -1,76 +1,90 @@
 ---
-- name: Capture a redacted Labfilter configuration snapshot
+# This playbook is intentionally read-only. Its private raw output stays in the
+# ignored artifacts directory and provides the evidence for the Ubuntu rebuild.
+- name: Capture the current Ubuntu Labfilter configuration
   hosts: labfilter
-  gather_facts: false
-  vars_files:
-    - ../vars/labfilter.yml
+  gather_facts: true
+  become: false
+  vars:
+    labfilter_discovery_commands:
+      platform: >-
+        cat /etc/os-release; printf '\n--- kernel ---\n'; uname -a;
+        printf '\n--- boot ---\n'; cat /proc/cmdline
+      network: >-
+        ip -details link show; printf '\n--- addresses ---\n'; ip address show;
+        printf '\n--- IPv4 routes ---\n'; ip route show table all;
+        printf '\n--- IPv6 routes ---\n'; ip -6 route show table all
+      bridge: >-
+        bridge link show 2>/dev/null || true;
+        printf '\n--- VLANs ---\n'; bridge vlan show 2>/dev/null || true;
+        printf '\n--- bridge sysctls ---\n';
+        sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables
+        net.bridge.bridge-nf-call-arptables 2>/dev/null || true
+      netplan: >-
+        find /etc/netplan -maxdepth 1 -type f -name '*.yaml' -print
+        -exec sed -n '1,260p' {} \; 2>/dev/null || true
+      networkd: >-
+        find /etc/systemd/network -maxdepth 1 -type f -print
+        -exec sed -n '1,260p' {} \; 2>/dev/null || true;
+        printf '\n--- networkctl ---\n'; networkctl status --all --no-pager 2>/dev/null || true
+      networkmanager: >-
+        nmcli --terse --fields NAME,UUID,TYPE,DEVICE connection show 2>/dev/null || true;
+        printf '\n--- configuration files ---\n';
+        find /etc/NetworkManager/system-connections -maxdepth 1 -type f -print
+        -exec sed -n '1,260p' {} \; 2>/dev/null || true
+      firewall: >-
+        nft list ruleset 2>/dev/null || sudo -n nft list ruleset 2>/dev/null || true;
+        printf '\n--- nftables configuration ---\n';
+        (find /etc/nftables.d -type f -print -exec sed -n '1,260p' {} \; 2>/dev/null || true);
+        sed -n '1,260p' /etc/nftables.conf 2>/dev/null || true;
+        printf '\n--- UFW ---\n'; ufw status verbose 2>/dev/null || sudo -n ufw status verbose 2>/dev/null || true
+      services: >-
+        systemctl list-unit-files --state=enabled --no-legend --no-pager 2>/dev/null || true;
+        printf '\n--- relevant service state ---\n';
+        systemctl status ssh nftables ufw systemd-networkd NetworkManager
+        hostapd dnsmasq --no-pager 2>/dev/null || true
+      packages: >-
+        dpkg-query -W -f='${binary:Package}\t${Version}\t${db:Status-Abbrev}\n'
+        2>/dev/null || true;
+        printf '\n--- manually installed ---\n'; apt-mark showmanual 2>/dev/null || true
   tasks:
-    - name: Verify the native OpenWrt management commands exist
-      ansible.builtin.raw: "test -x /sbin/uci && test -x /sbin/ip && command -v ubus >/dev/null"
+    - name: Run read-only configuration collection commands
+      ansible.builtin.shell: "{{ item.value }}"
+      args:
+        executable: /bin/sh
       changed_when: false
-
-    - name: Read and redact the UCI export without logging its contents
-      ansible.builtin.raw: >-
-        /sbin/uci export |
-        sed -E "s/((option|list)[[:space:]]+(password|passwd|key|secret|token|psk|passphrase|private_key|identity|auth_secret|hostname|ssid|macaddr)[[:space:]]+)'[^']*'/\1'<redacted>'/g"
-      register: labfilter_uci_export
-      changed_when: false
+      failed_when: false
       no_log: true
-
-    - name: Read platform information without logging raw command output
-      ansible.builtin.raw: "cat /etc/openwrt_release; ubus call system board"
-      register: labfilter_platform
-      changed_when: false
-      no_log: true
-
-    - name: Read interface and route state without logging raw command output
-      ansible.builtin.raw: "/sbin/ip -br address; printf '\n--- routes ---\n'; /sbin/ip route; printf '\n--- links ---\n'; /sbin/ip -br link"
-      register: labfilter_network
-      changed_when: false
-      no_log: true
-
-    - name: Read enabled service state without logging raw command output
-      ansible.builtin.raw: "for service in /etc/init.d/*; do [ -x \"$service\" ] && \"$service\" enabled && basename \"$service\"; done"
-      register: labfilter_services
-      changed_when: false
-      no_log: true
+      loop: "{{ labfilter_discovery_commands | dict2items }}"
+      register: labfilter_discovery_results
 
     - name: Create the ignored local discovery directory
       ansible.builtin.file:
-        path: "{{ playbook_dir }}/../../artifacts/discovery"
+        path: "{{ playbook_dir }}/../../artifacts/discovery/debian"
         state: directory
-        mode: "0700"
+        mode: '0700'
       delegate_to: localhost
       become: false
 
-    - name: Write the redacted UCI export locally
+    - name: Write private live-state reports locally
+      # Discovery can include addresses, Wi-Fi details, and host identity, so
+      # reports are intentionally local-only and excluded from Git.
       ansible.builtin.copy:
-        content: "{{ labfilter_uci_export.stdout }}"
-        dest: "{{ playbook_dir }}/../../artifacts/discovery/uci-export.conf"
-        mode: "0600"
+        content: "{{ item.stdout | default('') }}\n"
+        dest: "{{ playbook_dir }}/../../artifacts/discovery/debian/{{ item.item.key }}.txt"
+        mode: '0600'
       delegate_to: localhost
       become: false
+      no_log: true
+      loop: "{{ labfilter_discovery_results.results }}"
 
-    - name: Write the platform report locally
+    - name: Write a minimal non-sensitive discovery summary
       ansible.builtin.copy:
-        content: "{{ labfilter_platform.stdout }}"
-        dest: "{{ playbook_dir }}/../../artifacts/discovery/platform.txt"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-
-    - name: Write the network report locally
-      ansible.builtin.copy:
-        content: "{{ labfilter_network.stdout }}"
-        dest: "{{ playbook_dir }}/../../artifacts/discovery/network.txt"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-
-    - name: Write the enabled-service report locally
-      ansible.builtin.copy:
-        content: "{{ labfilter_services.stdout }}"
-        dest: "{{ playbook_dir }}/../../artifacts/discovery/services.txt"
-        mode: "0600"
+        content: |
+          platform={{ ansible_distribution | default('unknown') }} {{ ansible_distribution_version | default('unknown') }}
+          architecture={{ ansible_architecture | default('unknown') }}
+          collected={{ ansible_date_time.iso8601 | default('unknown') }}
+        dest: "{{ playbook_dir }}/../../artifacts/discovery/debian/summary.txt"
+        mode: '0600'
       delegate_to: localhost
       become: false
