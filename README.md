@@ -1,38 +1,37 @@
 # Labfilter configuration management
 
-This repository is the reproducible, Ansible-managed baseline for the current
-Debian-based Raspberry Pi 4 Labfilter. Connection details, Wi-Fi credentials,
-and private network information stay in the ignored local `.env` file.
+This repository is the Ansible source of truth for the Debian-based Raspberry
+Pi 4 Labfilter. Connection details, Wi-Fi credentials, and private network
+information stay in the ignored local `.env` file.
 
-## Current verified state
+## Current managed topology
 
-- NetworkManager manages DHCP on the wired management interface and Wi-Fi
-  station.
-- SSH and NetworkManager are enabled.
-- nftables is installed, but its service is disabled and the active ruleset has
-  no filtering policy.
-- No active Linux bridge or bridge-filtering configuration exists yet.
+- The independent wired management path and Wi-Fi station use NetworkManager
+  DHCP profiles; SSH is enabled for management.
+- `eth0` and `eth1` are unnumbered ports of transparent bridge `br0`.
+- nftables is enabled with a `bridge`-family forward hook. It allows ordinary
+  bridge traffic and drops the controller-resolved address snapshot for the
+  fixed `Block CNN` test policy.
 
-The baseline deliberately reproduces that state. It does not turn the Pi into
-an inline bridge until the physical port roles and policy have been reviewed.
+The bridge has no IPv4 or IPv6 address, CIDR, route, or gateway. It cannot
+replace the management path.
 
-## Setup
+## Setup and discovery
 
-Copy `.env.example` to `.env` and replace every placeholder locally. Encode the
-SSH private key and Wi-Fi PSK with base64; do not commit `.env`.
+Copy `.env.example` to `.env` and replace every placeholder locally. Base64
+encode the SSH private key and Wi-Fi PSK; never commit `.env`.
 
 ```sh
 ./scripts/ansible.sh ansible-playbook ansible/playbooks/discover.yml
 ```
 
-Discovery is read-only and stores private reports in ignored
-`artifacts/discovery/debian/`. Review those reports before representing a
-manual change in Ansible.
+Discovery is read-only and writes private reports under ignored
+`artifacts/discovery/debian/`. Review those reports before representing manual
+changes in Ansible.
 
-## Apply the verified baseline
+## Apply
 
-An apply requires three explicit safeguards because changing NetworkManager
-profiles can interrupt the only management path.
+Network and filtering changes need all three safeguards:
 
 ```sh
 ./scripts/ansible.sh ansible-playbook ansible/playbooks/apply.yml \
@@ -41,18 +40,18 @@ profiles can interrupt the only management path.
   -e labfilter_allow_network_changes=true
 ```
 
-The playbook verifies that the configured management address is present on its
-configured interface before and after the protected work. It reloads connection
-profiles without explicitly reconnecting a link.
+The playbook checks the management address before and after application, verifies
+that both bridge ports are attached to `br0`, validates the nftables syntax, and
+confirms the active bridge policy. It does not prove real forwarding without a
+client on each bridge side.
 
-`LABFILTER_ULA_PREFIX` is not used by this Debian baseline. Discovery found no
-active IPv6 Unique Local Address network, so remove that obsolete legacy
-setting from the local `.env` rather than choosing a new prefix.
+`LABFILTER_ULA_PREFIX` is unused and should remain absent: no ULA network is
+configured on this Labfilter.
 
 ## Layout
 
 - `ansible/playbooks/discover.yml` — read-only Debian discovery.
-- `ansible/playbooks/apply.yml` — guarded baseline application.
+- `ansible/playbooks/apply.yml` — guarded bridge and baseline application.
 - `ansible/templates/` — NetworkManager and nftables configuration.
-- `ansible/vars/labfilter.yml` — non-sensitive verified desired state.
-- `ARCHITECTURE.md` — observed state and the deferred inline-bridge design.
+- `ansible/vars/labfilter.yml` — non-sensitive desired state and fixed policy.
+- `ARCHITECTURE.md` — packet path, safeguards, and policy limitations.

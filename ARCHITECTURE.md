@@ -1,46 +1,52 @@
 # Labfilter architecture
 
-## Verified current state
+## Management plane
 
-The new Labfilter is a Debian-based Raspberry Pi 4 managed with NetworkManager.
-Its independent management path is a DHCP-configured wired Ethernet interface;
-the onboard Wi-Fi is a DHCP station using WPA-PSK. SSH is enabled for remote
-management.
+The management Ethernet connection is independent from the bridge and receives
+its address through DHCP. The Wi-Fi station is also DHCP-managed. SSH remains
+enabled. Guarded Ansible applies verify that the configured management address
+is assigned to its configured interface before and after any change.
 
-The two other physical Ethernet ports are present but no active Linux bridge
-exists. nftables is installed with an empty base configuration, while its system
-service is disabled. Therefore the current device does not filter traffic or
-operate as an inline bridge.
+## Transparent bridge
 
-No IPv6 ULA network was observed. `LABFILTER_ULA_PREFIX` belonged to the former
-platform configuration and has no role in this Debian baseline.
+`br0` is an unnumbered Linux bridge composed of `eth0` and `eth1`:
 
-## Rebuild boundary
+```text
+untrusted side ── eth0 ── br0 ── eth1 ── other side
+```
 
-Ansible recreates the observed management Ethernet and Wi-Fi DHCP profiles,
-the verified package baseline, SSH availability, and the inactive nftables
-service state. Addresses, SSID, PSK, connection host, and private key remain in
-ignored `.env` values.
+The bridge has IPv4 disabled and IPv6 ignored. It has no IP address, CIDR,
+gateway, DNS configuration, or management service. NetworkManager creates the
+bridge and its two Layer-2-only port profiles through Ansible.
 
-Network profile application is guarded by explicit confirmation and checks that
-the current management address remains assigned to its expected interface both
-before and after the work. The playbook loads profiles without explicitly
-reconnecting a link.
+## Packet filtering
 
-## Deferred inline bridge design
+nftables owns a `bridge`-family `forward` hook. This hook is used because
+transparent frames crossing `br0` are not routed through an IP forwarding path.
+The current policy is intentionally narrow:
 
-The intended Labfilter role remains an inline bridge between the home lab and
-an upstream network. That role must be designed as a separate, reviewed change
-because it will alter Layer-2 forwarding and can remove management access.
+- drop IPv4 and IPv6 destinations in the controller-resolved snapshot for the
+  fixed `Block CNN` test hostnames;
+- allow every other frame crossing the bridge.
 
-Before implementing it, verify and record:
+nftables cannot match a hostname directly. Each guarded apply resolves the
+fixed hostnames on the controller and renders validated address sets. The deny
+is therefore a point-in-time DNS/CDN snapshot; reapply after relevant DNS
+changes and do not treat it as durable content filtering.
 
-- which physical ports are the bridge members and their directionality;
-- which interface must retain local management access;
-- whether management must be reachable from Wi-Fi, wired Ethernet, or both;
-- the required forwarding policy and how bridge-family nftables will enforce
-  it; and
-- recovery validation from an independent local management path.
+The policy is active in `/etc/nftables.conf` and can be inspected locally with
+`nft list table bridge labfilter`. No policy-management web UI is installed on
+this Debian baseline, so Ansible remains the only permitted edit path.
 
-Do not use this baseline to infer a bridge topology or enable filtering. Once
-that design is approved, express it in Ansible before applying it to Labfilter.
+## Safety and verification
+
+- Network and firewall changes require explicit apply confirmation, local-access
+  confirmation, and network-change confirmation.
+- The playbook writes and reloads NetworkManager profiles, activates only `br0`
+  and its declared ports, and never moves the management connection into the
+  bridge.
+- Before nftables starts, the managed configuration passes `nft -c` syntax
+  validation. Afterward, Ansible checks bridge existence, both member ports,
+  the loaded policy structure, and retained management access.
+- A functional forwarding/block test still requires a client on each side of
+  `br0`; controller-side SSH arrives through the independent management path.

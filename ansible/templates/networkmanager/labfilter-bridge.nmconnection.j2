@@ -1,0 +1,16 @@
+# Managed by Labfilter Ansible. br0 is intentionally unnumbered so it remains
+# a transparent forwarding path and cannot become a management route.
+[connection]
+id={{ labfilter_bridge_name }}
+type=bridge
+interface-name={{ labfilter_bridge_name }}
+autoconnect=true
+
+[bridge]
+stp=false
+
+[ipv4]
+method=disabled
+
+[ipv6]
+method=ignore

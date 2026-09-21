@@ -1,7 +1,7 @@
 ---
 # This playbook is intentionally read-only. Its private raw output stays in the
 # ignored artifacts directory and provides the evidence for the Ubuntu rebuild.
-- name: Capture the current Ubuntu Labfilter configuration
+- name: Capture the current Debian Labfilter configuration
   hosts: labfilter
   gather_facts: true
   become: false

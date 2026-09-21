@@ -8,7 +8,8 @@ labfilter_packages:
   - wpasupplicant
 
 # The current system uses NetworkManager with DHCP for both management Ethernet
-# and the Wi-Fi station. No active software bridge was found during discovery.
+# and the Wi-Fi station. The bridge is explicitly unnumbered and does not
+# participate in management routing.
 labfilter_management_address: "{{ lookup('env', 'LABFILTER_MANAGEMENT_ADDRESS') }}"
 labfilter_management_interface: "{{ lookup('env', 'LABFILTER_MANAGEMENT_INTERFACE') }}"
 labfilter_management_connection_name: labfilter-management
@@ -19,7 +20,19 @@ labfilter_wifi_connection_name: labfilter-wifi
 labfilter_wifi_ssid: "{{ lookup('env', 'LABFILTER_WIFI_SSID') | default(lookup('env', 'LABFILTER_LANWIFI_SSID'), true) }}"
 labfilter_wifi_psk: "{{ (lookup('env', 'LABFILTER_WIFI_PSK_BASE64') | default(lookup('env', 'LABFILTER_LANWIFI_PSK_BASE64'), true)) | b64decode }}"
 
-# Discovery found the nftables package and its default configuration file, but
-# the service was disabled and no filtering rules were active. Preserve that
-# state rather than inventing a bridge policy before its topology is designed.
-labfilter_nftables_enabled: false
+# The approved transparent bridge uses a bridge-family nftables forward hook.
+# It remains separate from the management interface and carries no L3 address.
+labfilter_nftables_enabled: true
+labfilter_bridge_name: br0
+labfilter_bridge_interfaces:
+  - eth0
+  - eth1
+
+# This fixed test policy follows the earlier Labfilter intent: the bridge
+# forwards normally except for a current controller-side DNS snapshot.
+labfilter_block_rule_name: Block CNN
+labfilter_block_domains:
+  - cnn.com
+  - www.cnn.com
+labfilter_block_ipv4: []
+labfilter_block_ipv6: []

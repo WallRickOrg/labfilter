@@ -1,6 +1,6 @@
 ---
-# This playbook recreates the observed Debian-based Raspberry Pi baseline. It
-# never creates or changes the future inline bridge without a separate review.
+# This playbook manages the Debian-based Raspberry Pi's guarded management path
+# and its transparent, nftables-filtered inline bridge.
 - name: Apply guarded Labfilter baseline
   hosts: labfilter
   gather_facts: true
@@ -54,6 +54,29 @@
       check_mode: false
       no_log: true
 
+    - name: Resolve the fixed bridge deny hostnames on the controller
+      # nftables sets store addresses, not DNS names. One validated snapshot
+      # ensures both address families are rendered consistently for this apply.
+      ansible.builtin.command:
+        argv: "{{ [ansible_playbook_python, playbook_dir + '/../../scripts/resolve-dns.py'] + labfilter_block_domains }}"
+      register: labfilter_block_dns
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      check_mode: false
+      no_log: true
+
+    - name: Use resolved addresses for the bridge deny sets
+      ansible.builtin.set_fact:
+        labfilter_block_ipv4: "{{ (labfilter_block_dns.stdout | from_json).ipv4 }}"
+        labfilter_block_ipv6: "{{ (labfilter_block_dns.stdout | from_json).ipv6 }}"
+
+    - name: Require a non-empty bridge deny snapshot
+      ansible.builtin.assert:
+        that:
+          - (labfilter_block_ipv4 | length) + (labfilter_block_ipv6 | length) > 0
+        fail_msg: Refusing to apply an empty fixed bridge deny policy.
+
   tasks:
     - name: Install the observed Labfilter package baseline
       ansible.builtin.apt:
@@ -89,7 +112,28 @@
         mode: '0600'
       no_log: true
 
-    - name: Reload NetworkManager connection profiles without reconnecting links
+    - name: Install the unnumbered transparent bridge profile
+      # The bridge has neither IPv4 nor IPv6 configuration, keeping it out of
+      # the device management plane while it forwards Layer-2 traffic.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/networkmanager/labfilter-bridge.nmconnection.j2"
+        dest: /etc/NetworkManager/system-connections/labfilter-bridge.nmconnection
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Install the transparent bridge member profiles
+      # Both physical ports are enslaved only to br0; no DHCP profile is
+      # installed on either member interface.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/networkmanager/labfilter-bridge-port.nmconnection.j2"
+        dest: "/etc/NetworkManager/system-connections/labfilter-bridge-{{ item }}.nmconnection"
+        owner: root
+        group: root
+        mode: '0600'
+      loop: "{{ labfilter_bridge_interfaces }}"
+
+    - name: Reload NetworkManager connection profiles before bridge activation
       ansible.builtin.command:
         argv:
           - nmcli
@@ -97,19 +141,79 @@
           - reload
       changed_when: false
 
-    - name: Preserve the observed inactive nftables service state
-      ansible.builtin.systemd_service:
-        name: nftables
-        enabled: "{{ labfilter_nftables_enabled }}"
-        state: "{{ 'started' if labfilter_nftables_enabled else 'stopped' }}"
+    - name: Read active NetworkManager connection profiles
+      # Activation is conditional so repeated applies remain idempotent and do
+      # not needlessly disturb an already working transparent bridge.
+      ansible.builtin.command:
+        argv:
+          - nmcli
+          - --terse
+          - --fields
+          - NAME,DEVICE
+          - connection
+          - show
+          - --active
+      register: labfilter_active_connections
+      changed_when: false
+      when: not ansible_check_mode
 
-    - name: Install the observed empty nftables configuration
+    - name: Activate the transparent bridge without touching management
+      # br0 contains only eth0 and eth1, so this activation cannot migrate the
+      # protected management address away from its independent interface.
+      ansible.builtin.command:
+        argv:
+          - nmcli
+          - connection
+          - up
+          - "{{ labfilter_bridge_name }}"
+      when:
+        - not ansible_check_mode
+        - (labfilter_bridge_name + ':' + labfilter_bridge_name) not in labfilter_active_connections.stdout
+
+    - name: Activate each transparent bridge port
+      # NetworkManager does not automatically activate disconnected slave
+      # profiles when the bridge master is brought up. A zero-second wait
+      # submits each port activation without delaying management for carrier.
+      ansible.builtin.command:
+        argv:
+          - nmcli
+          - --wait
+          - '0'
+          - connection
+          - up
+          - "labfilter-bridge-{{ item }}"
+          - ifname
+          - "{{ item }}"
+      loop: "{{ labfilter_bridge_interfaces }}"
+      when:
+        - not ansible_check_mode
+        - ('labfilter-bridge-' + item + ':' + item) not in labfilter_active_connections.stdout
+
+    - name: Install the bridge forwarding policy
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../templates/nftables.conf.j2"
         dest: /etc/nftables.conf
         owner: root
         group: root
         mode: '0644'
+
+    - name: Validate the rendered nftables policy before enabling it
+      # Syntax validation happens before nftables flushes and installs the new
+      # bridge table, keeping an invalid policy from disrupting forwarding.
+      ansible.builtin.command:
+        argv:
+          - nft
+          - -c
+          - -f
+          - /etc/nftables.conf
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Enable and start nftables with the managed bridge policy
+      ansible.builtin.systemd_service:
+        name: nftables
+        enabled: "{{ labfilter_nftables_enabled }}"
+        state: "{{ 'started' if labfilter_nftables_enabled else 'stopped' }}"
 
   post_tasks:
     - name: Confirm local management access remains present
@@ -125,4 +229,44 @@
       changed_when: false
       failed_when: labfilter_management_address not in labfilter_management_after.stdout
       check_mode: false
+      no_log: true
+
+    - name: Verify the transparent bridge exists after application
+      ansible.builtin.command:
+        argv:
+          - ip
+          - link
+          - show
+          - "{{ labfilter_bridge_name }}"
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Verify both physical ports are bridge members
+      # A bridge device alone is insufficient; both requested interfaces must
+      # show br0 as their master before traffic can cross the filter hook.
+      ansible.builtin.shell: >-
+        bridge link show |
+        grep -F -- "master {{ labfilter_bridge_name }}" |
+        grep -F -- "{{ item }}"
+      args:
+        executable: /bin/sh
+      changed_when: false
+      loop: "{{ labfilter_bridge_interfaces }}"
+      when: not ansible_check_mode
+
+    - name: Verify nftables loaded the bridge forwarding policy
+      ansible.builtin.command:
+        argv:
+          - nft
+          - list
+          - table
+          - bridge
+          - labfilter
+      changed_when: false
+      register: labfilter_loaded_bridge_policy
+      failed_when: >-
+        labfilter_loaded_bridge_policy.rc != 0 or
+        'chain forward' not in labfilter_loaded_bridge_policy.stdout or
+        labfilter_block_rule_name not in labfilter_loaded_bridge_policy.stdout
+      when: not ansible_check_mode
       no_log: true
