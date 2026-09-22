@@ -1,176 +1,52 @@
-# Labfilter network architecture
+# Labfilter architecture
 
-Status: verified topology and intended security policy. This document records
-the design boundary; it does not authorize a live firewall or network change.
-Any implementation change must be represented in Ansible and applied only by
-the guarded Ansible workflow.
+## Management plane
 
-## Purpose
+The management Ethernet connection is independent from the bridge and receives
+its address through DHCP. The Wi-Fi station is also DHCP-managed. SSH remains
+enabled. Guarded Ansible applies verify that the configured management address
+is assigned to its configured interface before and after any change.
 
-Labfilter is an inline device between the home lab and an upstream route to the
-internet. It has three distinct security planes:
+## Transparent bridge
 
-1. A management plane on `eth0`.
-2. A wireless DMZ-side plane on `phy0-sta0`.
-3. An untrusted transparent bridge on `br-lan`, made from `eth1` and `eth2`.
+`br0` is an unnumbered Linux bridge composed of `eth0` and `eth1`:
 
-Private addresses, hostnames, wireless identity, and credentials are runtime
-values from the ignored `.env`. They are referenced below by policy variable
-names rather than stored in tracked documentation.
+```text
+untrusted side ── eth0 ── br0 ── eth1 ── other side
+```
 
-## Verified live topology
+The bridge has IPv4 disabled and IPv6 ignored. It has no IP address, CIDR,
+gateway, DNS configuration, or management service. NetworkManager creates the
+bridge and its two Layer-2-only port profiles through Ansible.
 
-The live device was inspected read-only after the management address was
-corrected. The following facts were confirmed:
+## Packet filtering
 
-- OpenWrt runs on a Raspberry Pi 5 with the `bcm27xx/bcm2712` target.
-- `eth0` is the `management` interface and obtains its address through DHCP.
-- `eth1` and `eth2` are ports of `br-lan`; the `lan` interface has no L3 address
-  and is configured as a bridge-facing interface.
-- `phy0-sta0` is the wireless station interface and belongs to the configured
-  wireless DHCP network, which
-  obtains its address through DHCP.
-- The default route leaves through `eth0`; the wireless station has a separate
-  upstream route.
-- The live firewall has a `lan` zone with ACCEPT input, output, and forwarding,
-  and a legacy wireless zone with ACCEPT input, output, and forwarding.
+nftables owns a `bridge`-family `forward` hook. This hook is used because
+transparent frames crossing `br0` are not routed through an IP forwarding path.
+The current policy is intentionally narrow:
 
-The wireless station configuration is rendered from the ignored SSID and
-base64-encoded PSK values. A guarded wireless apply uses OpenWrt's normal
-wireless reload and requires association plus DHCP before succeeding;
-wired management remains the independent recovery path.
-- Dropbear currently listens on TCP port 22. LuCI's HTTP services listen on
-  TCP ports 80 and 443.
-- A custom firewall rule is named `ssh` but currently targets TCP port 21 and
-  does not represent Dropbear's current port 22.
+- drop IPv4 and IPv6 destinations in the controller-resolved snapshot for the
+  fixed `Block CNN` test hostnames;
+- allow every other frame crossing the bridge.
 
-## Intended security policy
+nftables cannot match a hostname directly. Each guarded apply resolves the
+fixed hostnames on the controller and renders validated address sets. The deny
+is therefore a point-in-time DNS/CDN snapshot; reapply after relevant DNS
+changes and do not treat it as durable content filtering.
 
-### Management plane: `eth0`
+The policy is active in `/etc/nftables.conf` and can be inspected locally with
+`nft list table bridge labfilter`. No policy-management web UI is installed on
+this Debian baseline, so Ansible remains the only permitted edit path.
 
-- The management service must be reachable on the user-approved SSH port,
-  currently described as TCP port 21, from the approved source CIDR stored in
-  `LABFILTER_MANAGEMENT_ALLOWED_SOURCE_CIDR`.
-- Traffic from `LABFILTER_GATEWAY_ADDRESS` must be explicitly rejected before the
-  broader source allow rule. The gateway address must be populated and verified
-  before implementing this rule; it must not be inferred from the source CIDR.
-- The destination of this rule must be the management address on `eth0`, never
-  the wireless station address.
-- Management access from the local network is a hard invariant. Every Ansible
-  application must verify the current management address before a protected
-  change and verify it remains present afterward.
+## Safety and verification
 
-### Wireless DMZ plane: `phy0-sta0`
-
-- The wireless station is an untrusted DMZ-side ingress, not a trusted LAN.
-- Only TCP ports 21, 80, and 443 may be accepted to the OpenWrt device from the
-  DMZ policy source. The policy is represented by
-  `LABFILTER_DMZ_ALLOWED_TCP_PORTS` and defaults conceptually to `21,80,443`.
-- All other input from the DMZ must be rejected. Output may remain allowed for
-  the device's upstream operation, but forwarding must be explicitly defined
-  rather than inherited from an ACCEPT-all zone.
-- The port-21 intent must be resolved against the current Dropbear port-22
-  configuration before application. Do not silently move SSH or expose a
-  different service under the name `ssh`.
-
-### Inline bridge: `br-lan` / `eth1` / `eth2`
-
-- Traffic arriving from either physical bridge port is untrusted.
-- The bridge must not be a trusted management path and must not be allowed to
-  reach the router's management services by default.
-- Forwarding between the home-lab side and the upstream route must be limited
-  to explicitly approved stateful policy. Input to the OpenWrt device defaults
-  to reject; forwarding defaults to reject until a specific flow is required.
-- A transparent L2 bridge can bypass ordinary routed firewall-zone rules. The
-  current `lan` interface is `proto none`, so assigning it an ACCEPT zone does
-  not by itself prove that traffic crossing between `eth1` and `eth2` is
-  filtered. Enforcing the untrusted policy requires either a routed design or
-  an intentionally verified bridge/netfilter policy.
-
-### Bridge filtering implementation
-
-The reproducible implementation registers an Ansible-managed firewall4 script
-include and renders it to `/etc/firewall.user`, LuCI's Custom Rules file. The
-script defines a separate `bridge`-family table with a `forward` hook, matching
-ingress on the physical bridge ports and dropping destinations in CNN IPv4 and
-IPv6 sets resolved from tracked hostnames during the apply. This is intentionally
-separate from the routed `inet fw4` zones and does not require `br_netfilter` or
-bridge sysctl changes.
-
-The required `kmod-nft-bridge` kernel package is part of the tracked Ansible
-desired state. Because the management interface cannot reach OpenWrt feeds,
-the exact kernel-matched package URL and checksum are pinned for controller-side
-download, verified transfer, and local `opkg` installation.
-
-A guarded firewall-only apply installed the package and loaded the bridge
-table without reloading the network. A direct CNN HTTPS request timed out while
-a control HTTPS request succeeded, and the IPv4 drop counter increased. The
-legacy routed UCI rule was removed because its LuCI visibility incorrectly
-suggested that it governed transparent traffic.
-
-LuCI's standard Traffic Rules editor manages routed `inet fw4` policy, not
-bridge hooks. The policy is therefore registered as a native firewall4 script
-include and rendered into LuCI's **Network → Firewall → Custom Rules** file,
-where its actual nftables commands are visible. Representing the policy as a
-routed Traffic Rule would still be misleading because that packet path bypasses
-the rule.
-
-The fw4-only LuCI package installed on this device hides its stock Custom Rules
-menu behind an obsolete fw3 dependency. Ansible installs a separate **Network →
-Bridge nftables Rules** menu entry that opens an editor for the same script.
-The user explicitly permits edits through this page; each edit restarts the
-firewall and must be copied back into the Ansible template before another
-managed apply, which otherwise replaces the script.
-LuCI caches menu definitions under `/tmp`; the Ansible UI deployment removes
-only that transient cache so the new route appears without a reboot.
-
-The CNN rule is a fixed test policy whose hostnames are tracked in Ansible.
-nftables cannot match hostnames directly, so the controller resolves A and AAAA
-answers during every guarded apply and renders that single snapshot into the
-bridge sets. No CNN values are stored in `.env`. Encrypted DNS does not bypass
-an address already in the sets, but alternate hostnames and DNS changes after
-an apply require another guarded apply.
-
-The Proxmox test exception is a static TCP 8006 accept at the bridge-family
-forwarding hook. It deliberately contains no private backend address or `.env`
-configuration. OpenWrt does not DNAT this traffic and does not install a host
-route for it; both would incorrectly treat a transparent Layer 2 path as routed
-traffic.
-
-## Current gaps requiring explicit resolution
-
-The bridge filter is active, but the broader live state still has these gaps:
-
-1. The current `lan` and legacy wireless zones accept all input, output, and forwarding.
-2. The current named `ssh` rule uses port 21 while Dropbear listens on port 22.
-3. The current named rule must be redirected to the `eth0` management address
-   if it is intended to protect management access; its existing destination is
-   not the management interface.
-4. The exact gateway address to exclude is not recorded in the tracked
-   repository and must be supplied through ignored `.env` before implementation.
-5. Domain address sets are per-apply DNS/CDN snapshots and may affect other
-   names sharing the same CDN addresses.
-
-## Ansible implementation invariants
-
-- Put machine-specific policy values in ignored `.env` and fixed test-policy
-  intent in tracked Ansible templates/variables.
-- Make all firewall, network, service, and reboot changes through Ansible.
-- Require explicit apply confirmation and local-access confirmation.
-- Require the management address/interface guard for network and firewall work.
-- Back up `/etc/config` before a protected change and do not reload services
-  unless the service list is explicitly reviewed.
-- Validate management access from an independent local-network path before
-  declaring the change successful.
-
-## Acceptance tests before implementation is considered complete
-
-- The approved source can reach the intended SSH service on `eth0`.
-- The gateway address cannot reach that SSH service.
-- The DMZ-side wireless interface can reach only TCP 21, 80, and 443 on the
-  device; another test port is rejected.
-- The bridge ports cannot reach management services.
-- Required lab-to-internet forwarding works only through the explicitly approved
-  stateful path.
-- The tests pass after service reload and after a controlled reboot, with local
-  management access retained throughout.
+- Network and firewall changes require explicit apply confirmation, local-access
+  confirmation, and network-change confirmation.
+- The playbook writes and reloads NetworkManager profiles, activates only `br0`
+  and its declared ports, and never moves the management connection into the
+  bridge.
+- Before nftables starts, the managed configuration passes `nft -c` syntax
+  validation. Afterward, Ansible checks bridge existence, both member ports,
+  the loaded policy structure, and retained management access.
+- A functional forwarding/block test still requires a client on each side of
+  `br0`; controller-side SSH arrives through the independent management path.

@@ -1,0 +1,16 @@
+# Managed by Labfilter Ansible. This physical interface is only a bridge port;
+# its Layer-3 configuration is intentionally disabled.
+[connection]
+id=labfilter-bridge-{{ item }}
+type=802-3-ethernet
+interface-name={{ item }}
+master={{ labfilter_bridge_name }}
+slave-type=bridge
+autoconnect=true
+autoconnect-priority=100
+
+[ipv4]
+method=disabled
+
+[ipv6]
+method=ignore

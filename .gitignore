@@ -12,7 +12,10 @@ ansible/inventory/hosts.local.yml
 ansible/group_vars/*.local.yml
 ansible/host_vars/*.local.yml
 ansible/vars/*.local.yml
-ansible/templates/uci/*.local.j2
+# NetworkManager keyfiles can contain Wi-Fi credentials; keep local variants
+# and copied connection profiles out of Git.
+ansible/templates/**/*.local.j2
+*.nmconnection
 
 # Keep private keys, temporary logs, and Ansible runtime files out of Git.
 *.pem

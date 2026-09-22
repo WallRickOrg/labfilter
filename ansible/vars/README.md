@@ -1,10 +1,9 @@
-# Labfilter desired state
+# Labfilter Ansible variables
 
-`labfilter.yml` is the tracked, non-secret desired-state entry point. Populate it
-only after reviewing a successful local discovery report. Put machine-specific
-or secret overrides in an ignored `*.local.yml` file and pass it explicitly to
-Ansible when needed.
+`labfilter.yml` contains only verified, non-sensitive desired state for the
+Debian-based Raspberry Pi 4. Private addresses and Wi-Fi credentials are loaded
+from the ignored `.env` file by `scripts/ansible.sh`.
 
-Do not copy an unredacted `/etc/config` export into Git. The inline bridge's
-network and firewall values need an explicit safety review before they are
-added to the apply lists.
+Do not add bridge topology, SSIDs, private addresses, secrets, or keys here.
+First capture manual changes with the read-only discovery playbook, then convert
+only the non-sensitive configuration structure into this file or a template.

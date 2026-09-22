@@ -1,90 +1,38 @@
 ---
-# Populate these lists only from a verified live discovery report.
-# Each UCI set item is passed as one quoted argument to `uci set`, for example:
-#   - network.lan.proto=static
-# Keep passwords, Wi-Fi keys, tokens, and private material in an ignored local vars file.
-labfilter_uci_set: []
-labfilter_uci_delete: []
-labfilter_uci_add_list: []
-# Commit the rendered network and firewall files so LuCI, netifd, and fw4 read
-# the same persisted desired state after an apply.
-labfilter_uci_commit:
-  - firewall
-  - network
-  - wireless
-# The router management path cannot reach OpenWrt feeds. Pin the exact package
-# for its running kernel so Ansible can verify it on the controller, upload it,
-# and let opkg enforce the kernel dependency before changing firewall state.
+# This is the verified software and service baseline of the Raspberry Pi 4.
+# Keep machine-specific addresses and Wi-Fi credentials in ignored `.env`.
 labfilter_packages:
-  - name: kmod-nft-bridge
-    filename: kmod-nft-bridge_6.6.73-r1_aarch64_cortex-a76.ipk
-    url: >-
-      https://downloads.openwrt.org/releases/24.10.0/targets/bcm27xx/bcm2712/
-      kmods/6.6.73-1-d3ff9c24b2eb5661c9d6c16a85e195ec/
-      kmod-nft-bridge_6.6.73-r1_aarch64_cortex-a76.ipk
-    sha256: 4261587ddf9d5935a93f9d63a88215469529b5515c792f55878acb2edcd6f5c2
-# Reloading firewall is explicit because this device is an inline bridge; the
-# guarded apply flags are still required before this service can be reloaded.
-labfilter_services_reload:
-  - network
+  - network-manager
+  - nftables
+  - openssh-server
+  - wpasupplicant
 
-# Reload the station after writing wireless configuration so netifd consumes
-# the desired UCI state without tearing down a working Broadcom association.
-labfilter_reload_wireless: true
-
-# These are the verified live UCI packages, rendered locally and uploaded with raw SSH.
-labfilter_config_templates:
-  - dhcp
-  - dropbear
-  - firewall
-  - luci
-  - network
-  - rpcd
-  - system
-  - ttyd
-  - uhttpd
-  - wireless
-
-# This file is loaded before the generated inet fw4 table so it can filter
-# packets that cross the transparent eth1/eth2 bridge at the bridge hook.
-# Ansible writes it to LuCI's firewall custom-rules script and registers it as
-# a supported firewall4 include, rather than using a hidden automatic include.
-labfilter_nft_templates:
-  - bridge-filter
-
-# LuCI's stock Custom Rules menu is hidden on this fw4-only image by an obsolete
-# fw3 dependency. Install a dedicated editor that exposes the same managed
-# bridge-policy script and reminds users to synchronize UI changes to Ansible.
-labfilter_luci_ui_templates:
-  - source: bridge-nftables.js.j2
-    destination: /www/luci-static/resources/view/labfilter/bridge-nftables.js
-    mode: '0644'
-  - source: bridge-nftables.json.j2
-    destination: /usr/share/luci/menu.d/labfilter-bridge-nftables.json
-    mode: '0644'
-
-# Machine-specific values come from the ignored .env through the wrapper.
+# The current system uses NetworkManager with DHCP for both management Ethernet
+# and the Wi-Fi station. The bridge is explicitly unnumbered and does not
+# participate in management routing.
 labfilter_management_address: "{{ lookup('env', 'LABFILTER_MANAGEMENT_ADDRESS') }}"
 labfilter_management_interface: "{{ lookup('env', 'LABFILTER_MANAGEMENT_INTERFACE') }}"
-labfilter_device_hostname: "{{ lookup('env', 'LABFILTER_DEVICE_HOSTNAME') }}"
-labfilter_ula_prefix: "{{ lookup('env', 'LABFILTER_ULA_PREFIX') }}"
-labfilter_wan_ip: "{{ lookup('env', 'LABFILTER_WAN_IP') }}"
-labfilter_management_cidr: "{{ lookup('env', 'LABFILTER_MANAGEMENT_CIDR') }}"
-labfilter_upstream_cidr: "{{ lookup('env', 'LABFILTER_UPSTREAM_CIDR') }}"
-labfilter_upstream_address: "{{ lookup('env', 'LABFILTER_UPSTREAM_ADDRESS') }}"
-labfilter_lanwifi_ssid: "{{ lookup('env', 'LABFILTER_LANWIFI_SSID') }}"
-labfilter_lanwifi_psk: "{{ lookup('env', 'LABFILTER_LANWIFI_PSK_BASE64') | b64decode }}"
-# These identifiers reproduce the manually repaired station and its DHCP
-# network without placing wireless credentials in tracked configuration.
-labfilter_wifi_station_section: wifinet2
-labfilter_wifi_network_name: WIFI
-labfilter_rpcd_password: "{{ lookup('env', 'LABFILTER_RPCD_PASSWORD_BASE64') | b64decode }}"
-labfilter_bridge_interfaces: "{{ lookup('env', 'LABFILTER_BRIDGE_INTERFACES') | split(',') | map('trim') | list }}"
-# Block CNN is intentionally a fixed test policy, not machine-specific config.
-# The controller resolves these hostnames once per guarded apply.
+labfilter_management_connection_name: labfilter-management
+labfilter_wifi_interface: "{{ lookup('env', 'LABFILTER_WIFI_INTERFACE') | default('wlan0', true) }}"
+labfilter_wifi_connection_name: labfilter-wifi
+# The fallback recognizes the prior local name while users migrate their ignored
+# `.env`; only the LABFILTER_WIFI_* names appear in the safe committed sample.
+labfilter_wifi_ssid: "{{ lookup('env', 'LABFILTER_WIFI_SSID') | default(lookup('env', 'LABFILTER_LANWIFI_SSID'), true) }}"
+labfilter_wifi_psk: "{{ (lookup('env', 'LABFILTER_WIFI_PSK_BASE64') | default(lookup('env', 'LABFILTER_LANWIFI_PSK_BASE64'), true)) | b64decode }}"
+
+# The approved transparent bridge uses a bridge-family nftables forward hook.
+# It remains separate from the management interface and carries no L3 address.
+labfilter_nftables_enabled: true
+labfilter_bridge_name: br0
+labfilter_bridge_interfaces:
+  - eth0
+  - eth1
+
+# This fixed test policy follows the earlier Labfilter intent: the bridge
+# forwards normally except for a current controller-side DNS snapshot.
 labfilter_block_rule_name: Block CNN
 labfilter_block_domains:
   - cnn.com
   - www.cnn.com
-labfilter_block_cnn_ipv4: []
-labfilter_block_cnn_ipv6: []
+labfilter_block_ipv4: []
+labfilter_block_ipv6: []
