@@ -2,6 +2,9 @@
 
 ## Management plane
 
+The system hostname is `labfilter` and is managed by Ansible. The hostname
+alias in `/etc/hosts` is kept synchronized with the same value.
+
 The management Ethernet connection is independent from the bridge and receives
 its address through DHCP. The Wi-Fi station is also DHCP-managed. SSH remains
 enabled. Guarded Ansible applies verify that the configured management address

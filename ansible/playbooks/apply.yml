@@ -54,6 +54,20 @@
       check_mode: false
       no_log: true
 
+    - name: Replace the current hostname with the managed Labfilter name
+      # Deriving the old value at runtime avoids preserving a retired machine
+      # name in tracked configuration while updating the target safely.
+      ansible.builtin.hostname:
+        name: "{{ labfilter_device_hostname }}"
+
+    - name: Update the Debian local hostname alias
+      # Debian commonly stores the local hostname on 127.0.1.1. Match only
+      # that alias so unrelated static host entries remain untouched.
+      ansible.builtin.replace:
+        path: /etc/hosts
+        regexp: '^(\s*127\.0\.1\.1\s+)[^#]+?(\s*#.*)?$'
+        replace: '\g<1>{{ labfilter_device_hostname }}\g<2>'
+
     - name: Resolve the fixed bridge deny hostnames on the controller
       # nftables sets store addresses, not DNS names. One validated snapshot
       # ensures both address families are rendered consistently for this apply.
@@ -230,6 +244,14 @@
       failed_when: labfilter_management_address not in labfilter_management_after.stdout
       check_mode: false
       no_log: true
+
+    - name: Verify the effective hostname
+      ansible.builtin.command: hostname
+      register: labfilter_hostname_after
+      changed_when: false
+      check_mode: false
+      failed_when: labfilter_hostname_after.stdout | trim != labfilter_device_hostname
+      when: not ansible_check_mode
 
     - name: Verify the transparent bridge exists after application
       ansible.builtin.command:

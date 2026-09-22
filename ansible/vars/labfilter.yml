@@ -12,6 +12,7 @@ labfilter_packages:
 # participate in management routing.
 labfilter_management_address: "{{ lookup('env', 'LABFILTER_MANAGEMENT_ADDRESS') }}"
 labfilter_management_interface: "{{ lookup('env', 'LABFILTER_MANAGEMENT_INTERFACE') }}"
+labfilter_device_hostname: labfilter
 labfilter_management_connection_name: labfilter-management
 labfilter_wifi_interface: "{{ lookup('env', 'LABFILTER_WIFI_INTERFACE') | default('wlan0', true) }}"
 labfilter_wifi_connection_name: labfilter-wifi
