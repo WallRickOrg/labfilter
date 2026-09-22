@@ -1,0 +1,86 @@
+---
+# One-time cleanup for the interrupted experiment that mistakenly placed ELK
+# on Labfilter. The normal apply playbook never installs or starts Docker.
+- name: Remove accidental local ELK trial
+  hosts: labfilter
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../vars/labfilter.yml
+  tasks:
+    - name: Require explicit cleanup confirmation
+      ansible.builtin.assert:
+        that:
+          - labfilter_cleanup_confirmed | default(false) | bool
+          - labfilter_allow_local_access | default(false) | bool
+        fail_msg: >-
+          Refusing cleanup: set labfilter_cleanup_confirmed=true and
+          labfilter_allow_local_access=true after reviewing the target names.
+
+    - name: Verify independent management access before cleanup
+      ansible.builtin.command:
+        argv:
+          - ip
+          - -4
+          - address
+          - show
+          - dev
+          - "{{ labfilter_management_interface }}"
+      register: labfilter_cleanup_management
+      changed_when: false
+      failed_when: labfilter_management_address not in labfilter_cleanup_management.stdout
+      no_log: true
+
+    - name: Find only containers from the accidental ELK Compose project
+      ansible.builtin.command:
+        argv:
+          - docker
+          - ps
+          - -aq
+          - --filter
+          - label=com.docker.compose.project=elk
+      register: labfilter_trial_containers
+      changed_when: false
+      failed_when: false
+
+    - name: Remove only the accidental ELK trial containers
+      ansible.builtin.command:
+        argv: "{{ ['docker', 'rm', '--force'] + (labfilter_trial_containers.stdout.split() | list) }}"
+      when: labfilter_trial_containers.stdout | trim | length > 0
+
+    - name: Remove the accidental ELK trial network
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - rm
+          - elk_elk
+      register: labfilter_trial_network
+      changed_when: labfilter_trial_network.rc == 0
+      failed_when: false
+
+    - name: Remove Docker packages from Labfilter
+      # Keep the external Docker server independent from the inline bridge.
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose
+          - docker-cli
+          - docker-buildx
+          - containerd
+        state: absent
+        purge: false
+
+    - name: Verify management access after cleanup
+      ansible.builtin.command:
+        argv:
+          - ip
+          - -4
+          - address
+          - show
+          - dev
+          - "{{ labfilter_management_interface }}"
+      register: labfilter_cleanup_management_after
+      changed_when: false
+      failed_when: labfilter_management_address not in labfilter_cleanup_management_after.stdout
+      no_log: true

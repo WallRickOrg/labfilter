@@ -47,6 +47,9 @@
         dpkg-query -W -f='${binary:Package}\t${Version}\t${db:Status-Abbrev}\n'
         2>/dev/null || true;
         printf '\n--- manually installed ---\n'; apt-mark showmanual 2>/dev/null || true
+      storage: >-
+        df -h / /opt 2>/dev/null || true;
+        printf '\n--- memory ---\n'; free -h 2>/dev/null || true
   tasks:
     - name: Run read-only configuration collection commands
       ansible.builtin.shell: "{{ item.value }}"

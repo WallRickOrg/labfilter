@@ -1,8 +1,8 @@
 #!/usr/sbin/nft -f
 
 # Managed bridge policy: allow transparent forwarding by default and deny the
-# fixed controller-resolved test destination set before the final allow.
-flush ruleset
+# fixed controller-resolved test destination set before the final allow. This
+# file owns only the Labfilter table so Docker's host firewall rules survive.
 
 table bridge labfilter {
     set blocked_ipv4 {
@@ -17,8 +17,20 @@ table bridge labfilter {
 
     chain forward {
         type filter hook forward priority filter; policy accept;
-        ip daddr @blocked_ipv4 counter drop comment "{{ labfilter_block_rule_name }} IPv4"
-        ip6 daddr @blocked_ipv6 counter drop comment "{{ labfilter_block_rule_name }} IPv6"
+        ip daddr @blocked_ipv4 jump block_ipv4
+        ip6 daddr @blocked_ipv6 jump block_ipv6
         counter accept comment "Allow remaining transparent bridge traffic"
+    }
+
+    chain block_ipv4 {
+        # Limit only the log statement; the following drop remains unconditional.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "{{ labfilter_block_rule_name }} IPv4"
+    }
+
+    chain block_ipv6 {
+        # Limit only the log statement; the following drop remains unconditional.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "{{ labfilter_block_rule_name }} IPv6"
     }
 }

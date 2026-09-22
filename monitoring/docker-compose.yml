@@ -1,0 +1,66 @@
+# Run this file on the separate Docker server, not on Labfilter.
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.4
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      # The API is local to the Docker server; Kibana and Logstash use the
+      # private Compose network to reach it.
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - elk
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:9.5.4
+    restart: unless-stopped
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m
+    ports:
+      # Bind this only to the Docker server address reachable by Labfilter,
+      # and restrict UDP/5514 at the Docker server firewall to Labfilter.
+      - "${LABFILTER_ELK_LOGSTASH_BIND_ADDRESS:?set in monitoring/.env}:5514:5514/udp"
+    volumes:
+      - logstash-data:/usr/share/logstash/data
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.5.4
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_SECURITY_ENABLED=false
+      - NODE_OPTIONS=--max-old-space-size=512
+    ports:
+      # Bind Kibana to the intended Docker-server management address.
+      - "${LABFILTER_ELK_KIBANA_BIND_ADDRESS:?set in monitoring/.env}:5601:5601"
+    volumes:
+      - kibana-data:/usr/share/kibana/data
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+volumes:
+  # Named volumes preserve state when the containers are recreated.
+  elasticsearch-data:
+  kibana-data:
+  logstash-data:
+
+networks:
+  elk:
+    driver: bridge
