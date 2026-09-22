@@ -4,6 +4,8 @@ This repository is the Ansible source of truth for the Debian-based Raspberry
 Pi 4 Labfilter. Connection details, Wi-Fi credentials, and private network
 information stay in the ignored local `.env` file.
 
+The managed system hostname is `labfilter`.
+
 ## Current managed topology
 
 - The independent wired management path and Wi-Fi station use NetworkManager
