@@ -28,11 +28,12 @@
     - name: Require externalized management and Wi-Fi inputs
       ansible.builtin.assert:
         that:
-          - labfilter_management_address | length > 0
-          - labfilter_management_interface | length > 0
-          - labfilter_wifi_interface | length > 0
-          - labfilter_wifi_ssid | length > 0
-          - labfilter_wifi_psk | length > 0
+          - "labfilter_management_address | length > 0"
+          - "labfilter_management_interface | length > 0"
+          - "labfilter_wifi_interface | length > 0"
+          - "labfilter_wifi_ssid | length > 0"
+          - "labfilter_wifi_psk | length > 0"
+          - "labfilter_elk_logstash_host | length > 0"
         fail_msg: >-
           LABFILTER_MANAGEMENT_ADDRESS, LABFILTER_MANAGEMENT_INTERFACE,
           LABFILTER_WIFI_INTERFACE, LABFILTER_WIFI_SSID, and
@@ -97,6 +98,61 @@
         name: "{{ labfilter_packages }}"
         state: present
         update_cache: false
+
+    - name: Restore the validated bridge policy before other changes
+      # The inline path is restored first. This table allows all bridge traffic
+      # except the explicit deny set.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/nftables.conf.j2"
+        dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Validate the early bridge policy
+      ansible.builtin.command:
+        argv:
+          - nft
+          - -c
+          - -f
+          - /etc/nftables.conf
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Remove the old managed bridge table before early reload
+      ansible.builtin.command:
+        argv:
+          - nft
+          - delete
+          - table
+          - bridge
+          - labfilter
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Reload the validated bridge policy before other changes
+      ansible.builtin.systemd_service:
+        name: nftables
+        state: restarted
+      when: not ansible_check_mode
+
+    - name: Install the host-local blocked-event rsyslog filter
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/rsyslog-labfilter.conf.j2"
+        dest: /etc/rsyslog.d/30-labfilter-blocked.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart rsyslog
+
+    - name: Validate the host-local rsyslog configuration
+      ansible.builtin.command:
+        argv:
+          - rsyslogd
+          - -N1
+      changed_when: false
+      when: not ansible_check_mode
 
     - name: Create the protected NetworkManager connection directory
       ansible.builtin.file:
@@ -210,6 +266,9 @@
         owner: root
         group: root
         mode: '0644'
+      notify:
+        - Remove previous Labfilter nftables table
+        - Restart Labfilter nftables
 
     - name: Validate the rendered nftables policy before enabling it
       # Syntax validation happens before nftables flushes and installs the new
@@ -289,6 +348,35 @@
       failed_when: >-
         labfilter_loaded_bridge_policy.rc != 0 or
         'chain forward' not in labfilter_loaded_bridge_policy.stdout or
-        labfilter_block_rule_name not in labfilter_loaded_bridge_policy.stdout
+        labfilter_block_rule_name not in labfilter_loaded_bridge_policy.stdout or
+        'LABFILTER_BLOCKED' not in labfilter_loaded_bridge_policy.stdout
       when: not ansible_check_mode
       no_log: true
+
+  handlers:
+    - name: Restart rsyslog
+      # Reload the single managed forwarding rule without touching the bridge.
+      ansible.builtin.systemd_service:
+        name: rsyslog
+        state: restarted
+      when: not ansible_check_mode
+
+    - name: Remove previous Labfilter nftables table
+      # Replacing only the managed table avoids flushing unrelated firewall
+      # tables owned by other host services.
+      ansible.builtin.command:
+        argv:
+          - nft
+          - delete
+          - table
+          - bridge
+          - labfilter
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Restart Labfilter nftables
+      ansible.builtin.systemd_service:
+        name: nftables
+        state: restarted
+      when: not ansible_check_mode

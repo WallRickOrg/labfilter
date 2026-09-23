@@ -1,39 +1,29 @@
-# Labfilter configuration management
+# Labfilter configuration management repository
 
-This repository is the Ansible source of truth for the Debian-based Raspberry
-Pi 4 Labfilter. Connection details, Wi-Fi credentials, and private network
-information stay in the ignored local `.env` file.
+This repository is the Ansible source of truth for a Debian-based Raspberry Pi
+4 Labfilter. Connection details, Wi-Fi credentials, and private network data
+stay in the ignored `.env`; secrets there must be base64 encoded.
 
-The managed system hostname is `labfilter`.
+## Current topology
 
-## Current managed topology
-
-- The independent wired management path and Wi-Fi station use NetworkManager
-  DHCP profiles; SSH is enabled for management.
-- `eth0` and `eth1` are unnumbered ports of transparent bridge `br0`.
-- nftables is enabled with a `bridge`-family forward hook. It allows ordinary
-  bridge traffic and drops the controller-resolved address snapshot for the
-  fixed `Block CNN` test policy.
-
-The bridge has no IPv4 or IPv6 address, CIDR, route, or gateway. It cannot
-replace the management path.
+- Independent DHCP management Ethernet and Wi-Fi paths provide SSH access.
+- `br0` is an unnumbered transparent bridge made from `eth0` and `eth1`.
+- nftables filters the bridge in the `bridge`-family `forward` hook.
+- The fixed test deny policy logs only dropped packets with
+  `LABFILTER_BLOCKED`; other bridge traffic is accepted.
 
 ## Setup and discovery
 
-Copy `.env.example` to `.env` and replace every placeholder locally. Base64
-encode the SSH private key and Wi-Fi PSK; never commit `.env`.
+Copy `.env.example` to `.env`, fill local values, and never commit `.env`.
+Discovery is read-only and stores private reports under ignored artifacts:
 
 ```sh
 ./scripts/ansible.sh ansible-playbook ansible/playbooks/discover.yml
 ```
 
-Discovery is read-only and writes private reports under ignored
-`artifacts/discovery/debian/`. Review those reports before representing manual
-changes in Ansible.
+## Guarded apply
 
-## Apply
-
-Network and filtering changes need all three safeguards:
+Network and filtering changes require all three safeguards:
 
 ```sh
 ./scripts/ansible.sh ansible-playbook ansible/playbooks/apply.yml \
@@ -42,18 +32,23 @@ Network and filtering changes need all three safeguards:
   -e labfilter_allow_network_changes=true
 ```
 
-The playbook checks the management address before and after application, verifies
-that both bridge ports are attached to `br0`, validates the nftables syntax, and
-confirms the active bridge policy. It does not prove real forwarding without a
-client on each bridge side.
+The playbook preserves the management path, validates nftables before reload,
+and verifies the active bridge policy afterward. It manages rsyslog only as the
+blocked-event forwarder; it does not install or run Docker/Compose.
 
-`LABFILTER_ULA_PREFIX` is unused and should remain absent: no ULA network is
-configured on this Labfilter.
+## External ELK monitoring
+
+The Docker Compose stack runs on a separate Docker server. See
+[`monitoring/`](monitoring/) for the pinned Elastic images, persistent named
+volumes, Logstash pipeline, remote-listener environment sample, and weekly ILM
+bootstrap. Configure the Docker server firewall to permit UDP/5514 only from
+Labfilter.
 
 ## Layout
 
 - `ansible/playbooks/discover.yml` — read-only Debian discovery.
-- `ansible/playbooks/apply.yml` — guarded bridge and baseline application.
-- `ansible/templates/` — NetworkManager and nftables configuration.
-- `ansible/vars/labfilter.yml` — non-sensitive desired state and fixed policy.
-- `ARCHITECTURE.md` — packet path, safeguards, and policy limitations.
+- `ansible/playbooks/apply.yml` — guarded Labfilter baseline and filtering.
+- `ansible/templates/` — NetworkManager, nftables, and rsyslog configuration.
+- `ansible/vars/labfilter.yml` — non-sensitive desired state.
+- `monitoring/` — external Docker-server Compose project.
+- `ARCHITECTURE.md` — packet path, monitoring path, and safety constraints.

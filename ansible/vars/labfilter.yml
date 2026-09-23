@@ -6,6 +6,7 @@ labfilter_packages:
   - nftables
   - openssh-server
   - wpasupplicant
+  - rsyslog
 
 # The current system uses NetworkManager with DHCP for both management Ethernet
 # and the Wi-Fi station. The bridge is explicitly unnumbered and does not
@@ -37,3 +38,8 @@ labfilter_block_domains:
   - www.cnn.com
 labfilter_block_ipv4: []
 labfilter_block_ipv6: []
+
+# The external Docker server address is private topology, so it stays in the
+# ignored environment file and is used only by the host-local rsyslog forwarder.
+labfilter_elk_logstash_host: "{{ lookup('env', 'LABFILTER_ELK_LOGSTASH_HOST') | default('', true) }}"
+labfilter_elk_logstash_port: 5514

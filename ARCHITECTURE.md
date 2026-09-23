@@ -2,54 +2,65 @@
 
 ## Management plane
 
-The system hostname is `labfilter` and is managed by Ansible. The hostname
-alias in `/etc/hosts` is kept synchronized with the same value.
-
-The management Ethernet connection is independent from the bridge and receives
-its address through DHCP. The Wi-Fi station is also DHCP-managed. SSH remains
-enabled. Guarded Ansible applies verify that the configured management address
-is assigned to its configured interface before and after any change.
+The system hostname `labfilter` and its independent management connection are
+managed by Ansible. The management Ethernet interface uses DHCP, Wi-Fi is a
+separate DHCP station, and SSH remains reachable through that path. Guarded
+applies verify the configured management address before and after changes.
 
 ## Transparent bridge
 
-`br0` is an unnumbered Linux bridge composed of `eth0` and `eth1`:
+`br0` is an unnumbered Layer-2 bridge composed of `eth0` and `eth1`:
 
 ```text
 untrusted side ── eth0 ── br0 ── eth1 ── other side
 ```
 
-The bridge has IPv4 disabled and IPv6 ignored. It has no IP address, CIDR,
-gateway, DNS configuration, or management service. NetworkManager creates the
-bridge and its two Layer-2-only port profiles through Ansible.
+The bridge has no management address, route, gateway, or DHCP profile.
 
 ## Packet filtering
 
-nftables owns a `bridge`-family `forward` hook. This hook is used because
-transparent frames crossing `br0` are not routed through an IP forwarding path.
-The current policy is intentionally narrow:
+Ansible owns the `bridge`-family nftables table `labfilter` and its `forward`
+hook. The policy drops the controller-resolved fixed test destinations and
+accepts all other transparent bridge traffic. Each deny chain logs a
+rate-limited `LABFILTER_BLOCKED` prefix, then drops unconditionally; log
+rate-limiting can never turn a deny into an allow. The apply validates nftables
+syntax before replacing only this dedicated table, so unrelated firewall tables
+are not flushed.
 
-- drop IPv4 and IPv6 destinations in the controller-resolved snapshot for the
-  fixed `Block CNN` test hostnames;
-- allow every other frame crossing the bridge.
+## External blocked-traffic monitoring
 
-nftables cannot match a hostname directly. Each guarded apply resolves the
-fixed hostnames on the controller and renders validated address sets. The deny
-is therefore a point-in-time DNS/CDN snapshot; reapply after relevant DNS
-changes and do not treat it as durable content filtering.
+The monitoring stack runs on a separate Docker server, not on Labfilter:
 
-The policy is active in `/etc/nftables.conf` and can be inspected locally with
-`nft list table bridge labfilter`. No policy-management web UI is installed on
-this Debian baseline, so Ansible remains the only permitted edit path.
+```text
+br0 blocked packet
+        │ nftables kernel log: LABFILTER_BLOCKED
+        ▼
+Labfilter rsyslog ── management path/UDP ──> remote Logstash
+                                             │
+                                      private Compose network
+                                             │
+                                  Elasticsearch ──> Kibana
+```
 
-## Safety and verification
+Labfilter Ansible installs only rsyslog and a filter that forwards matching
+kernel messages to the configured remote Logstash host. It does not install,
+start, or configure Docker or Compose. The stack definition, Logstash pipeline,
+and ILM bootstrap are in `monitoring/` and are operated on the Docker server.
+The Docker server's firewall must restrict UDP/5514 to Labfilter. Its
+Elasticsearch API is loopback-only and Kibana binds to its configured
+management address. ELK traffic does not traverse Labfilter's `br0` hook.
 
-- Network and firewall changes require explicit apply confirmation, local-access
-  confirmation, and network-change confirmation.
-- The playbook writes and reloads NetworkManager profiles, activates only `br0`
-  and its declared ports, and never moves the management connection into the
-  bridge.
-- Before nftables starts, the managed configuration passes `nft -c` syntax
-  validation. Afterward, Ansible checks bridge existence, both member ports,
-  the loaded policy structure, and retained management access.
-- A functional forwarding/block test still requires a client on each side of
-  `br0`; controller-side SSH arrives through the independent management path.
+The external stack uses persistent named Docker volumes and rolls the
+blocked-event write alias every seven days without deleting older data. Elastic
+security is disabled for this initial trusted-home-network deployment; add
+authentication and encrypted transport before exposing it more broadly.
+
+## Safety and rebuild rules
+
+- All Labfilter target changes go through guarded `ansible/playbooks/apply.yml`.
+- Protected applies require explicit confirmation, local-access permission, and
+  network-change permission.
+- The playbook validates the rendered nftables policy before reload and checks
+  management reachability, bridge membership, and the loaded policy afterward.
+- No real forwarding test is inferred from controller SSH; test both bridge
+  sides separately.
