@@ -44,7 +44,10 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - XPACK_SECURITY_ENABLED=false
-      - NODE_OPTIONS=--max-old-space-size=512
+      # Kibana's default heap is too small for the 9.x startup workload on
+      # small Docker hosts; reserve 1 GiB for Node while leaving headroom for
+      # Elasticsearch and Logstash.
+      - NODE_OPTIONS=--max-old-space-size=1024
     ports:
       # Bind Kibana to the intended Docker-server management address.
       - "${LABFILTER_ELK_KIBANA_BIND_ADDRESS:?set in monitoring/.env}:5601:5601"

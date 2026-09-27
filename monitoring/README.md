@@ -25,5 +25,10 @@ Kibana is available on the configured Docker-server management address at port
 5601. Elasticsearch is loopback-only. The three named Docker volumes preserve
 Elasticsearch, Kibana, and Logstash data across container recreation.
 
+Kibana is configured with a 1 GiB Node.js heap. Ensure the Docker server has
+enough free memory for that heap plus Elasticsearch's 1 GiB JVM heap, Logstash,
+and container overhead; otherwise reduce the Elasticsearch heap and host other
+services elsewhere rather than lowering Kibana back to 512 MiB.
+
 The stack currently has security disabled and should remain on a trusted home
 management network until authentication and encrypted transport are added.
