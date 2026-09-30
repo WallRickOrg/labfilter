@@ -12,8 +12,8 @@ curl -fsS -X PUT "$es_url/_ilm/policy/$policy" \
   -d '{"policy":{"phases":{"hot":{"actions":{"rollover":{"max_age":"7d","max_primary_shard_size":"5gb"}}}}}}'
 
 curl -fsS -X PUT "$es_url/_index_template/labfilter-blocked" \
-  -H 'Content-Type: application/json' \
-  -d '{"index_patterns":["labfilter-blocked-*"],"template":{"settings":{"index.lifecycle.name":"labfilter-blocked-weekly","index.lifecycle.rollover_alias":"labfilter-blocked","number_of_shards":1,"number_of_replicas":0}}}'
+-H 'Content-Type: application/json' \
+-d '{"index_patterns":["labfilter-blocked-*"],"template":{"settings":{"index.lifecycle.name":"labfilter-blocked-weekly","index.lifecycle.rollover_alias":"labfilter-blocked","number_of_shards":1,"number_of_replicas":0},"mappings":{"properties":{"source":{"properties":{"ip":{"type":"ip"},"port":{"type":"integer"},"mac":{"type":"keyword"}}},"destination":{"properties":{"ip":{"type":"ip"},"port":{"type":"integer"},"mac":{"type":"keyword"}}},"network":{"properties":{"transport":{"type":"keyword"},"ingress":{"properties":{"interface":{"type":"keyword"}}},"egress":{"properties":{"interface":{"type":"keyword"}}}}},"nftables":{"properties":{"mac":{"type":"keyword"}}}}}}}'
 
 if ! curl -fsS "$es_url/_alias/$alias" >/dev/null 2>&1; then
   curl -fsS -X PUT "$es_url/$alias-000001" \

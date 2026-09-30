@@ -22,6 +22,13 @@ Labfilter's Ansible-managed rsyslog rule.
    sh bootstrap-ilm.sh
    ```
 
+   When changing the index template, force the current alias onto a new
+   index after running the bootstrap:
+
+   ```sh
+   sh rollover-ilm.sh
+   ```
+
 4. Upload the Logstash pipeline into the named Docker volume. `docker cp`
    transfers the file from the client running this command, so the Docker
    daemon does not need access to the repository path:
