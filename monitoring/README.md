@@ -16,7 +16,13 @@ Labfilter's Ansible-managed rsyslog rule.
    docker compose up -d elasticsearch kibana
    ```
 
-3. Upload the Logstash pipeline into the named Docker volume. `docker cp`
+3. After Elasticsearch is healthy, initialize the weekly rollover alias:
+
+   ```sh
+   sh bootstrap-ilm.sh
+   ```
+
+4. Upload the Logstash pipeline into the named Docker volume. `docker cp`
    transfers the file from the client running this command, so the Docker
    daemon does not need access to the repository path:
 
@@ -33,12 +39,6 @@ Labfilter's Ansible-managed rsyslog rule.
    Repeat the upload steps whenever `blocked.conf` changes. The
    `logstash-pipeline` named volume preserves the uploaded file when the
    container is recreated.
-
-4. After Elasticsearch is healthy, initialize the weekly rollover alias:
-
-   ```sh
-   sh bootstrap-ilm.sh
-   ```
 
 Kibana is available on the configured Docker-server management address at port
 5601. Elasticsearch is loopback-only. The three named Docker volumes preserve
