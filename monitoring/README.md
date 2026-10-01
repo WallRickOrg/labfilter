@@ -1,8 +1,11 @@
 # External ELK monitoring stack
 
 This Compose project runs on the separate Docker server, not on Labfilter.
-It receives only rate-limited `LABFILTER_BLOCKED` events forwarded by
-Labfilter's Ansible-managed rsyslog rule.
+It receives `LABFILTER_BLOCKED` and `LABFILTER_TRAFFIC` events forwarded by
+Labfilter's Ansible-managed rsyslog rule. Accepted traffic is indexed in
+`labfilter-traffic`; blocked traffic remains in `labfilter-blocked`. TCP
+traffic to or from port 5601 is excluded at the Labfilter logging chain so
+Kibana does not recursively monitor itself.
 
 ## Start
 

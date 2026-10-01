@@ -19,7 +19,17 @@ table bridge labfilter {
         type filter hook forward priority filter; policy accept;
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6
+        jump log_forward
         counter accept comment "Allow remaining transparent bridge traffic"
+    }
+
+    chain log_forward {
+        # Kibana's browser/API port is excluded so the monitoring platform does
+        # not recursively log its own UI traffic.
+        tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
+        tcp sport 5601 counter return comment "Exclude Kibana source traffic"
+        # Log accepted packets, then return to the parent chain without blocking.
+        log prefix "LABFILTER_TRAFFIC " counter return comment "Log accepted bridge traffic"
     }
 
     chain block_ipv4 {
