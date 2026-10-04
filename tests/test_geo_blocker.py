@@ -44,6 +44,27 @@ class GeoBlockPolicyTests(unittest.TestCase):
 
         self.assertEqual(blocker.classify_blocks(destinations), {})
 
+    def test_protected_openai_or_codex_address_is_not_blocked(self):
+        destinations = {
+            "203.0.113.40": {"DE"},
+            "2001:db8::40": {"FR"},
+        }
+        protected = {
+            blocker.ipaddress.ip_address("203.0.113.40"),
+            blocker.ipaddress.ip_address("2001:db8::40"),
+        }
+        self.assertEqual(blocker.classify_blocks(destinations, protected), {})
+
+    def test_protected_records_are_removed_for_live_set_reconciliation(self):
+        records = {
+            "203.0.113.40": {"country": "DE", "added": "2026-09-30"},
+            "203.0.113.41": {"country": "DE", "added": "2026-09-30"},
+        }
+        protected = {blocker.ipaddress.ip_address("203.0.113.40")}
+        self.assertEqual(blocker.remove_protected_records(records, protected), 1)
+        self.assertNotIn("203.0.113.40", records)
+        self.assertIn("203.0.113.41", records)
+
     def test_inventory_preserves_first_added_metadata_and_uniqueness(self):
         records = {"203.0.113.1": {"country": "GB", "added": "2026-09-30"}}
 

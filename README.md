@@ -43,6 +43,11 @@ currently disabled.
 
 ## Automated destination blocking
 
+The blocker also resolves the configured OpenAI and Codex service hostnames
+each hourly run and excludes their current addresses from the deny sets. This
+avoids hard-coding provider IPs and removes previously learned matching
+addresses during the same nftables reconciliation.
+
 An Ansible-managed cron job runs at the start of every hour and uses a paginated
 Elasticsearch aggregation over the previous 12 hours of `labfilter-*` events.
 It ignores IPv4 destinations in `192.168.0.0/16` and destinations geolocated to

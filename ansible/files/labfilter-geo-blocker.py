@@ -9,6 +9,7 @@ import fcntl
 import ipaddress
 import json
 import os
+import socket
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +21,16 @@ from urllib import error, parse, request
 ALLOWED_COUNTRIES = {"CA", "US"}
 LOCAL_IPV4_NETWORK = ipaddress.ip_network("192.168.0.0/16")
 SET_NAMES = {4: "geo_blocked_ipv4", 6: "geo_blocked_ipv6"}
+# These service names are resolved at each scheduled run so changing provider
+# addresses do not become permanently blocked by the country-only policy.
+DEFAULT_PROTECTED_HOSTNAMES = (
+    "api.openai.com",
+    "auth.openai.com",
+    "chatgpt.com",
+    "chat.openai.com",
+    "codex.openai.com",
+    "codex.com",
+)
 
 
 class BlockerError(RuntimeError):
@@ -120,9 +131,36 @@ def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
     return destinations
 
 
-def classify_blocks(destinations: dict[str, set[str]]) -> dict[str, str]:
+def resolve_protected_addresses(config: dict[str, Any]) -> set[ipaddress._BaseAddress]:
+    """Resolve configured OpenAI/Codex names into addresses excluded from blocking."""
+    protected: set[ipaddress._BaseAddress] = set()
+    hostnames = config.get("protected_hostnames", DEFAULT_PROTECTED_HOSTNAMES)
+    if not isinstance(hostnames, list):
+        raise BlockerError("protected_hostnames must be a list")
+    for hostname in hostnames:
+        try:
+            results = socket.getaddrinfo(
+                str(hostname), None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM
+            )
+        except socket.gaierror:
+            # A transient DNS failure must not turn a normal policy run into
+            # a failure; a later run will resolve the name again.
+            continue
+        for result in results:
+            try:
+                protected.add(ipaddress.ip_address(result[4][0]))
+            except ValueError:
+                continue
+    return protected
+
+
+def classify_blocks(
+    destinations: dict[str, set[str]],
+    protected_addresses: set[ipaddress._BaseAddress] | None = None,
+) -> dict[str, str]:
     """Select canonical addresses that policy requires blocking, once each."""
     blocked: dict[str, str] = {}
+    protected_addresses = protected_addresses or set()
     for raw_address, observed_codes in destinations.items():
         try:
             address = ipaddress.ip_address(raw_address)
@@ -131,6 +169,8 @@ def classify_blocks(destinations: dict[str, set[str]]) -> dict[str, str]:
             continue
 
         comparable = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else address
+        if address in protected_addresses or comparable in protected_addresses:
+            continue
         if isinstance(comparable, ipaddress.IPv4Address) and comparable in LOCAL_IPV4_NETWORK:
             continue
         codes = {
@@ -325,6 +365,46 @@ def update_inventory(
     return added
 
 
+def remove_protected_records(
+    records: dict[str, dict[str, str]],
+    protected_addresses: set[ipaddress._BaseAddress],
+) -> int:
+    """Remove previously learned protected addresses before nftables reconciliation."""
+    removed = []
+    for raw_address in records:
+        address = ipaddress.ip_address(raw_address)
+        comparable = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else address
+        if address in protected_addresses or comparable in protected_addresses:
+            removed.append(raw_address)
+    for raw_address in removed:
+        del records[raw_address]
+    return len(removed)
+
+
+def reconcile_protected_elements(
+    nft_binary: str,
+    records: dict[str, dict[str, str]],
+    include_comments: bool,
+) -> int:
+    """Replace live sets in one transaction after protected records are removed."""
+    # Flushing and restoring in one nft transaction prevents a transient
+    # policy gap while removing an address that DNS now identifies as safe.
+    batch = render_elements(records, include_comments, flush_sets=True)
+    result = subprocess.run(
+        [nft_binary, "--file", "-"],
+        input=batch,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise BlockerError(
+            f"nftables rejected protected-address reconciliation: {result.stderr.strip()}"
+        )
+    return len(records)
+
+
 def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     """Keep the cron interface small and move machine-specific values to JSON."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -358,8 +438,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         include_path = Path(str(config["include_file"]))
         nft_binary = str(config.get("nft_binary", "/usr/sbin/nft"))
         destinations = query_destinations(config)
-        candidates = classify_blocks(destinations)
+        protected_addresses = resolve_protected_addresses(config)
+        candidates = classify_blocks(destinations, protected_addresses)
         records = load_state(state_path)
+        removed = remove_protected_records(records, protected_addresses)
         from datetime import datetime, timezone
 
         newly_recorded = update_inventory(
@@ -375,9 +457,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         atomic_write(state_path, state_document, 0o640)
         atomic_write(
-            include_path, render_elements(records, comments_supported, flush_sets=False), 0o640
+            include_path,
+            render_elements(records, comments_supported, flush_sets=bool(removed)),
+            0o640,
         )
-        activated = apply_missing_elements(nft_binary, records, comments_supported)
+        activated = (
+            reconcile_protected_elements(nft_binary, records, comments_supported)
+            if removed
+            else apply_missing_elements(nft_binary, records, comments_supported)
+        )
 
     print(
         f"examined {len(destinations)} unique destinations; "
