@@ -10,7 +10,7 @@ services:
     ports:
       # The API is local to the Docker server; Kibana and Logstash use the
       # private Compose network to reach it.
-      - "127.0.0.1:9200:9200"
+      - "0.0.0.0:9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     networks:
@@ -34,7 +34,7 @@ services:
       - logstash-data:/usr/share/logstash/data
       # The pipeline is uploaded into this named volume with docker cp. This
       # keeps remote Docker clients from depending on daemon-side host paths.
-      - logstash-pipeline:/usr/share/logstash/pipeline:ro
+      - logstash-pipeline:/usr/share/logstash/pipeline:rw
     depends_on:
       - elasticsearch
     networks:
