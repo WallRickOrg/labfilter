@@ -20,12 +20,21 @@ The bridge has no management address, route, gateway, or DHCP profile.
 ## Packet filtering
 
 Ansible owns the `bridge`-family nftables table `labfilter` and its `forward`
-hook. The policy drops the controller-resolved fixed test destinations and
-accepts all other transparent bridge traffic. Each deny chain logs a
+hook. The policy drops the controller-resolved fixed test destinations and the
+persistent IPv4/IPv6 sets learned by the hourly GeoIP job, then accepts all
+other transparent bridge traffic. Each deny chain logs a
 rate-limited `LABFILTER_BLOCKED` prefix, then drops unconditionally; log
 rate-limiting can never turn a deny into an allow. The apply validates nftables
 syntax before replacing only this dedicated table, so unrelated firewall tables
 are not flushed.
+
+The GeoIP job queries only aggregations of `destination.ip` and
+`destination.geo.country_iso_code` from the preceding 12 hours. Destinations in
+`192.168.0.0/16`, the US, or Canada are excluded. Other and unknown locations
+are retained in a root-owned JSON inventory and a generated nftables include,
+grouped by location. The job compares that inventory with the live sets and
+adds only missing unique elements. This keeps first-added dates stable and
+restores policy after a reload without replacing the static table hourly.
 
 ## External blocked-traffic monitoring
 
@@ -46,13 +55,15 @@ Labfilter Ansible installs only rsyslog and a filter that forwards matching
 kernel messages to the configured remote Logstash host. It does not install,
 start, or configure Docker or Compose. The stack definition, Logstash pipeline,
 and ILM bootstrap are in `monitoring/` and are operated on the Docker server.
-The Docker server's firewall must restrict UDP/5514 to Labfilter. Its
-Elasticsearch API is loopback-only and Kibana binds to its configured
-management address. ELK traffic does not traverse Labfilter's `br0` hook.
+The Docker server's firewall must restrict UDP/5514 to Labfilter. Elasticsearch
+must be reachable over the independent management path for the scheduled
+query, but TCP/9200 must be restricted to Labfilter and trusted administrators.
+Kibana binds to its configured management address. ELK traffic does not
+traverse Labfilter's `br0` hook.
 
 The external stack uses persistent named Docker volumes and rolls the
 blocked-event write alias every seven days without deleting older data. Elastic
-security is disabled for this initial trusted-home-network deployment; add
+security is disabled for this initial trusted-home-network deployment. Add
 authentication and encrypted transport before exposing it more broadly.
 
 ## Safety and rebuild rules

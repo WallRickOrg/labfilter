@@ -1,0 +1,11 @@
+{
+  "elasticsearch_url": {{ labfilter_elasticsearch_url | to_json }},
+  "index_pattern": {{ labfilter_geo_block_index_pattern | to_json }},
+  "lookback_hours": {{ labfilter_geo_block_lookback_hours | int }},
+  "aggregation_page_size": {{ labfilter_geo_block_aggregation_page_size | int }},
+  "request_timeout_seconds": {{ labfilter_geo_block_request_timeout_seconds | int }},
+  "state_file": {{ labfilter_geo_block_state_file | to_json }},
+  "include_file": {{ labfilter_geo_block_include_file | to_json }},
+  "nft_binary": "/usr/sbin/nft",
+  "lock_file": "/run/lock/labfilter-geo-blocker.lock"
+}

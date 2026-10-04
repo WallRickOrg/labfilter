@@ -56,8 +56,11 @@ map and dashboard are in `kibana/`; deploy them with the named-container
    container is recreated.
 
 Kibana is available on the configured Docker-server management address at port
-5601. Elasticsearch is loopback-only. The three named Docker volumes preserve
-Elasticsearch, Kibana, and Logstash data across container recreation.
+5601. Elasticsearch must also be reachable from Labfilter's independent
+management path for the hourly destination aggregation. Restrict TCP/9200 at
+the Docker-server firewall to Labfilter and trusted administrators. The three
+named Docker volumes preserve Elasticsearch, Kibana, and Logstash data across
+container recreation.
 
 Kibana is configured with a 1 GiB Node.js heap. Ensure the Docker server has
 enough free memory for that heap plus Elasticsearch's 1 GiB JVM heap, Logstash,
