@@ -32,7 +32,9 @@ services:
       - "${LABFILTER_ELK_LOGSTASH_BIND_ADDRESS:?set in monitoring/.env}:5514:5514/udp"
     volumes:
       - logstash-data:/usr/share/logstash/data
-      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      # The pipeline is uploaded into this named volume with docker cp. This
+      # keeps remote Docker clients from depending on daemon-side host paths.
+      - logstash-pipeline:/usr/share/logstash/pipeline:ro
     depends_on:
       - elasticsearch
     networks:
@@ -44,7 +46,10 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - XPACK_SECURITY_ENABLED=false
-      - NODE_OPTIONS=--max-old-space-size=512
+      # Kibana's default heap is too small for the 9.x startup workload on
+      # small Docker hosts; reserve 1 GiB for Node while leaving headroom for
+      # Elasticsearch and Logstash.
+      - NODE_OPTIONS=--max-old-space-size=1024
     ports:
       # Bind Kibana to the intended Docker-server management address.
       - "${LABFILTER_ELK_KIBANA_BIND_ADDRESS:?set in monitoring/.env}:5601:5601"
@@ -60,6 +65,8 @@ volumes:
   elasticsearch-data:
   kibana-data:
   logstash-data:
+  # Persistent pipeline configuration uploaded through the Docker API.
+  logstash-pipeline:
 
 networks:
   elk:

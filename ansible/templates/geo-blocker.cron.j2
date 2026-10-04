@@ -1,0 +1,5 @@
+# Managed by Ansible. The job emits only aggregate counts to the local journal.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+0 * * * * root /usr/local/sbin/labfilter-geo-blocker --config /etc/labfilter/geo-blocker.json 2>&1 | /usr/bin/logger -t labfilter-geo-blocker

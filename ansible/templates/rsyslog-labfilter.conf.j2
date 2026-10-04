@@ -1,7 +1,7 @@
-# Forward only the managed nftables blocked-event prefix to the external
-# Docker server's Logstash listener. No general system or ELK logs are sent.
+# Forward only managed nftables traffic-event prefixes to the external Docker
+# server's Logstash listener. No general system or ELK logs are sent.
 # Use the RainerScript regex operator supported by Debian's rsyslog package.
-if ($syslogfacility-text == 'kern' and re_match($msg, 'LABFILTER_BLOCKED')) then {
+if ($syslogfacility-text == 'kern' and re_match($msg, 'LABFILTER_(BLOCKED|TRAFFIC)')) then {
     action(
         type="omfwd"
         target="{{ labfilter_elk_logstash_host }}"

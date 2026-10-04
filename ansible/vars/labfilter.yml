@@ -2,6 +2,7 @@
 # This is the verified software and service baseline of the Raspberry Pi 4.
 # Keep machine-specific addresses and Wi-Fi credentials in ignored `.env`.
 labfilter_packages:
+  - cron
   - network-manager
   - nftables
   - openssh-server
@@ -43,3 +44,16 @@ labfilter_block_ipv6: []
 # ignored environment file and is used only by the host-local rsyslog forwarder.
 labfilter_elk_logstash_host: "{{ lookup('env', 'LABFILTER_ELK_LOGSTASH_HOST') | default('', true) }}"
 labfilter_elk_logstash_port: 5514
+
+# The hourly blocker queries only aggregated destination addresses and GeoIP
+# country codes. The server address remains in ignored local configuration.
+labfilter_elasticsearch_url: >-
+  {{ lookup('env', 'LABFILTER_ELASTICSEARCH_URL')
+     | default('http://' + lookup('env', 'LABFILTER_ELK_LOGSTASH_HOST') + ':9200', true) }}
+labfilter_geo_block_index_pattern: labfilter-*
+labfilter_geo_block_lookback_hours: 12
+labfilter_geo_block_aggregation_page_size: 1000
+labfilter_geo_block_request_timeout_seconds: 30
+labfilter_geo_block_state_directory: /var/lib/labfilter
+labfilter_geo_block_state_file: /var/lib/labfilter/geo-blocks.json
+labfilter_geo_block_include_file: /var/lib/labfilter/geo-block-elements.nft

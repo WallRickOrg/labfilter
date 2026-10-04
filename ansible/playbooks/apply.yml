@@ -34,10 +34,12 @@
           - "labfilter_wifi_ssid | length > 0"
           - "labfilter_wifi_psk | length > 0"
           - "labfilter_elk_logstash_host | length > 0"
+          - "labfilter_elasticsearch_url | length > 0"
         fail_msg: >-
           LABFILTER_MANAGEMENT_ADDRESS, LABFILTER_MANAGEMENT_INTERFACE,
-          LABFILTER_WIFI_INTERFACE, LABFILTER_WIFI_SSID, and
-          LABFILTER_WIFI_PSK_BASE64 must be set in the ignored .env.
+          LABFILTER_WIFI_INTERFACE, LABFILTER_WIFI_SSID,
+          LABFILTER_WIFI_PSK_BASE64, LABFILTER_ELK_LOGSTASH_HOST, and
+          LABFILTER_ELASTICSEARCH_URL must be set in the ignored .env.
       no_log: true
 
     - name: Confirm local management access before protected changes
@@ -98,6 +100,30 @@
         name: "{{ labfilter_packages }}"
         state: present
         update_cache: false
+
+    - name: Create the protected GeoIP blocker directories
+      # Learned public addresses are policy state, not credentials, but only
+      # root needs to modify the inventory consumed by nftables.
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+      loop:
+        - "{{ labfilter_geo_block_state_directory }}"
+        - /etc/labfilter
+
+    - name: Seed the persistent dynamic nftables include
+      # force=false preserves entries learned by the scheduled job while still
+      # making a clean rebuild valid before the first hourly run.
+      ansible.builtin.copy:
+        dest: "{{ labfilter_geo_block_include_file }}"
+        content: "# Managed by labfilter-geo-blocker; no learned elements yet.\n"
+        owner: root
+        group: root
+        mode: '0640'
+        force: false
 
     - name: Restore the validated bridge policy before other changes
       # The inline path is restored first. This table allows all bridge traffic
@@ -288,6 +314,56 @@
         enabled: "{{ labfilter_nftables_enabled }}"
         state: "{{ 'started' if labfilter_nftables_enabled else 'stopped' }}"
 
+    - name: Install the Elasticsearch GeoIP blocker
+      # The script uses only Python's standard library and consumes aggregated
+      # destination fields instead of copying raw traffic logs to Labfilter.
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/labfilter-geo-blocker.py"
+        dest: /usr/local/sbin/labfilter-geo-blocker
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install the GeoIP blocker configuration
+      # The URL is machine-specific but non-secret; keeping it in ignored .env
+      # avoids publishing private topology in tracked desired state.
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/geo-blocker.json.j2"
+        dest: /etc/labfilter/geo-blocker.json
+        owner: root
+        group: root
+        mode: '0640'
+
+    - name: Install the hourly GeoIP blocker cron job
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/geo-blocker.cron.j2"
+        dest: /etc/cron.d/labfilter-geo-blocker
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable the hourly cron scheduler
+      # Cron reads /etc/cron.d automatically, so no restart is needed after a
+      # schedule update.
+      ansible.builtin.systemd_service:
+        name: cron
+        enabled: true
+        state: started
+
+    - name: Run the initial GeoIP blocker synchronization
+      # Apply the learned policy during the guarded deployment instead of
+      # waiting for the first hourly cron boundary. The worker is idempotent
+      # and reports only aggregate counts, not the indexed addresses.
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/labfilter-geo-blocker
+          - --config
+          - /etc/labfilter/geo-blocker.json
+      register: labfilter_geo_blocker_initial_sync
+      changed_when: false
+      failed_when: labfilter_geo_blocker_initial_sync.rc != 0
+      no_log: true
+
   post_tasks:
     - name: Confirm local management access remains present
       ansible.builtin.command:
@@ -349,6 +425,8 @@
         labfilter_loaded_bridge_policy.rc != 0 or
         'chain forward' not in labfilter_loaded_bridge_policy.stdout or
         labfilter_block_rule_name not in labfilter_loaded_bridge_policy.stdout or
+        'geo_blocked_ipv4' not in labfilter_loaded_bridge_policy.stdout or
+        'geo_blocked_ipv6' not in labfilter_loaded_bridge_policy.stdout or
         'LABFILTER_BLOCKED' not in labfilter_loaded_bridge_policy.stdout
       when: not ansible_check_mode
       no_log: true

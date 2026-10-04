@@ -15,11 +15,32 @@ table bridge labfilter {
         elements = { {{ labfilter_block_ipv6 | join(', ') }} }
     }
 
+    # The hourly Elasticsearch job owns these persistent dynamic elements.
+    set geo_blocked_ipv4 {
+        type ipv4_addr
+    }
+
+    set geo_blocked_ipv6 {
+        type ipv6_addr
+    }
+
     chain forward {
         type filter hook forward priority filter; policy accept;
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6
+        ip daddr @geo_blocked_ipv4 jump block_geo_ipv4
+        ip6 daddr @geo_blocked_ipv6 jump block_geo_ipv6
+        jump log_forward
         counter accept comment "Allow remaining transparent bridge traffic"
+    }
+
+    chain log_forward {
+        # Kibana's browser/API port is excluded so the monitoring platform does
+        # not recursively log its own UI traffic.
+        tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
+        tcp sport 5601 counter return comment "Exclude Kibana source traffic"
+        # Log accepted packets, then return to the parent chain without blocking.
+        log prefix "LABFILTER_TRAFFIC " counter return comment "Log accepted bridge traffic"
     }
 
     chain block_ipv4 {
@@ -33,4 +54,19 @@ table bridge labfilter {
         limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
         counter drop comment "{{ labfilter_block_rule_name }} IPv6"
     }
+
+    chain block_geo_ipv4 {
+        # Dynamic GeoIP blocks use the same bounded logging behavior as fixed blocks.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "Automated GeoIP destination block IPv4"
+    }
+
+    chain block_geo_ipv6 {
+        # Keeping address families separate makes nftables type validation explicit.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "Automated GeoIP destination block IPv6"
+    }
 }
+
+# Persist the hourly job's learned elements across nftables reloads and reboots.
+include "{{ labfilter_geo_block_include_file }}"
