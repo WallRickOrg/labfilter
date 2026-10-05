@@ -33,7 +33,9 @@ labfilter_bridge_interfaces:
 
 # This fixed test policy follows the earlier Labfilter intent: the bridge
 # forwards normally except for a current controller-side DNS snapshot.
-labfilter_block_rule_name: Block CNN
+# The current hostname is a test input; the event label describes the generic
+# blocked-policy path because future deny rules use the same event pipeline.
+labfilter_block_rule_name: Block policy
 labfilter_block_domains:
   - cnn.com
   - www.cnn.com

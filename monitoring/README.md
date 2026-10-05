@@ -12,6 +12,14 @@ New events are enriched with GeoLite2 City data into
 map and dashboard are in `kibana/`; deploy them with the named-container
 `docker cp` workflow documented there.
 
+## DNS enrichment
+
+Events receive best-effort `source.hostname` and `destination.hostname`
+fields from cached reverse-DNS lookups while the original IP fields remain
+unchanged. Successful answers are cached for one hour and failed answers for
+five minutes, using Google Public DNS as the configured upstream. PTR names
+may be absent or may not equal the hostname originally requested by a client.
+
 ## Start
 
 1. Copy `.env.example` to `.env` on the Docker server and set its local bind
@@ -42,6 +50,8 @@ map and dashboard are in `kibana/`; deploy them with the named-container
    daemon does not need access to the repository path:
 
    ```sh
+docker compose build logstash
+   docker compose build logstash
    docker compose stop logstash
    docker compose create logstash
    logstash_container="$(docker compose ps -q logstash)"
