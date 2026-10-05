@@ -20,6 +20,17 @@ unchanged. Successful answers are cached for one hour and failed answers for
 five minutes, using Google Public DNS as the configured upstream. PTR names
 may be absent or may not equal the hostname originally requested by a client.
 
+## Updating Logstash
+
+Use the repository deployment script for pipeline or image changes. It validates
+Compose configuration, rebuilds the DNS-enabled image, uploads the pipeline
+through the named Docker volume, restarts only Logstash, and verifies the
+container and DNS plugin:
+
+```sh
+./update-logstash.sh
+```
+
 ## Start
 
 1. Copy `.env.example` to `.env` on the Docker server and set its local bind
