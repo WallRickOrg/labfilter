@@ -22,7 +22,10 @@ services:
       retries: 10
 
   logstash:
-    image: docker.elastic.co/logstash/logstash:9.5.4
+    build:
+      context: ./logstash
+      dockerfile: Dockerfile
+    image: labfilter-logstash:9.5.4-dns
     restart: unless-stopped
     environment:
       - LS_JAVA_OPTS=-Xms256m -Xmx256m
