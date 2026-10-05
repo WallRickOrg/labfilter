@@ -59,3 +59,12 @@ labfilter_geo_block_request_timeout_seconds: 30
 labfilter_geo_block_state_directory: /var/lib/labfilter
 labfilter_geo_block_state_file: /var/lib/labfilter/geo-blocks.json
 labfilter_geo_block_include_file: /var/lib/labfilter/geo-block-elements.nft
+# These destinations are resolved at each hourly run and excluded from the
+# non-CA/US deny set; no provider IP is hard-coded into the repository.
+labfilter_geo_block_protected_hostnames:
+  - api.openai.com
+  - auth.openai.com
+  - chatgpt.com
+  - chat.openai.com
+  - codex.openai.com
+  - codex.com

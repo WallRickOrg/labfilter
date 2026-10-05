@@ -6,6 +6,7 @@
   "request_timeout_seconds": {{ labfilter_geo_block_request_timeout_seconds | int }},
   "state_file": {{ labfilter_geo_block_state_file | to_json }},
   "include_file": {{ labfilter_geo_block_include_file | to_json }},
+  "protected_hostnames": {{ labfilter_geo_block_protected_hostnames | to_json }},
   "nft_binary": "/usr/sbin/nft",
   "lock_file": "/run/lock/labfilter-geo-blocker.lock"
 }
