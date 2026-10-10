@@ -21,6 +21,7 @@ ansible/templates/**/*.local.j2
 *.nmconnection
 
 # Keep private keys, temporary logs, and Ansible runtime files out of Git.
+.venv/
 *.pem
 *.key
 *.retry

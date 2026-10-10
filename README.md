@@ -15,10 +15,18 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 ## Setup and discovery
 
 Copy `.env.example` to `.env`, fill local values, and never commit `.env`.
+The wrapper loads `.env` and the SSH key, but it does not install Ansible.
+Create or activate an Ansible virtual environment before running it:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip ansible-core
+```
+
 Discovery is read-only and stores private reports under ignored artifacts:
 
 ```sh
-./scripts/ansible.sh ansible-playbook ansible/playbooks/discover.yml
+./scripts/ansible.sh .venv/bin/ansible-playbook ansible/playbooks/discover.yml
 ```
 
 ## Guarded apply
@@ -26,7 +34,7 @@ Discovery is read-only and stores private reports under ignored artifacts:
 Network and filtering changes require all three safeguards:
 
 ```sh
-./scripts/ansible.sh ansible-playbook ansible/playbooks/apply.yml \
+./scripts/ansible.sh .venv/bin/ansible-playbook ansible/playbooks/apply.yml \
   -e labfilter_apply_confirmed=true \
   -e labfilter_allow_local_access=true \
   -e labfilter_allow_network_changes=true
