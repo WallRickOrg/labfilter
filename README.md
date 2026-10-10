@@ -51,16 +51,20 @@ currently disabled.
 
 ## Automated destination blocking
 
-The blocker also resolves the configured OpenAI and Codex service hostnames
-each hourly run and excludes their current addresses from the deny sets. This
-avoids hard-coding provider IPs and removes previously learned matching
-addresses during the same nftables reconciliation.
+The blocker resolves configured OpenAI, Codex, GitHub, and GitHub Container
+Registry service hostnames each hourly run and excludes their current addresses
+from the deny sets. This avoids hard-coding provider IPs and removes previously
+learned matching addresses during the same nftables reconciliation. GitHub's
+published Meta API ranges are useful for reference, but GitHub documents that
+they are not exhaustive for every service, so hostname protection is the
+managed policy here.
 
 An Ansible-managed cron job runs at the start of every hour and uses a paginated
 Elasticsearch aggregation over the previous 12 hours of `labfilter-*` events.
 It ignores IPv4 destinations in `192.168.0.0/16` and destinations geolocated to
-the US or Canada. All other IPv4 and IPv6 destinations, including addresses
-without a GeoIP country, are added once to persistent nftables sets.
+the configured safe-country set (`AU`, `CA`, `GB`, `NZ`, and `US` by default).
+All other IPv4 and IPv6 destinations, including addresses without a GeoIP
+country, are added once to persistent nftables sets.
 
 The learned inventory is grouped by country code or `UNKNOWN` in
 `/var/lib/labfilter/geo-block-elements.nft`. On nftables versions that support

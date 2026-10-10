@@ -18,11 +18,15 @@ from typing import Any, Iterable
 from urllib import error, parse, request
 
 
-ALLOWED_COUNTRIES = {"CA", "US"}
+# Keep the default conservative; deployments can expand this through managed
+# Ansible data without changing the executable.
+DEFAULT_ALLOWED_COUNTRIES = {"AU", "CA", "GB", "NZ", "US"}
 LOCAL_IPV4_NETWORK = ipaddress.ip_network("192.168.0.0/16")
 SET_NAMES = {4: "geo_blocked_ipv4", 6: "geo_blocked_ipv6"}
 # These service names are resolved at each scheduled run so changing provider
-# addresses do not become permanently blocked by the country-only policy.
+# addresses do not become permanently blocked by the country-only policy. GitHub
+# publishes CIDRs, but its own documentation says that list is not exhaustive;
+# hostname protection covers the client endpoints used by Git and Codex safely.
 DEFAULT_PROTECTED_HOSTNAMES = (
     "api.openai.com",
     "auth.openai.com",
@@ -30,6 +34,14 @@ DEFAULT_PROTECTED_HOSTNAMES = (
     "chat.openai.com",
     "codex.openai.com",
     "codex.com",
+    "github.com",
+    "ssh.github.com",
+    "api.github.com",
+    "raw.githubusercontent.com",
+    "objects.githubusercontent.com",
+    "codeload.github.com",
+    "gist.githubusercontent.com",
+    "ghcr.io",
 )
 
 
@@ -132,7 +144,7 @@ def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
 
 
 def resolve_protected_addresses(config: dict[str, Any]) -> set[ipaddress._BaseAddress]:
-    """Resolve configured OpenAI/Codex names into addresses excluded from blocking."""
+    """Resolve configured provider names into addresses excluded from blocking."""
     protected: set[ipaddress._BaseAddress] = set()
     hostnames = config.get("protected_hostnames", DEFAULT_PROTECTED_HOSTNAMES)
     if not isinstance(hostnames, list):
@@ -157,10 +169,12 @@ def resolve_protected_addresses(config: dict[str, Any]) -> set[ipaddress._BaseAd
 def classify_blocks(
     destinations: dict[str, set[str]],
     protected_addresses: set[ipaddress._BaseAddress] | None = None,
+    allowed_countries: set[str] | None = None,
 ) -> dict[str, str]:
     """Select canonical addresses that policy requires blocking, once each."""
     blocked: dict[str, str] = {}
     protected_addresses = protected_addresses or set()
+    allowed_countries = allowed_countries or DEFAULT_ALLOWED_COUNTRIES
     for raw_address, observed_codes in destinations.items():
         try:
             address = ipaddress.ip_address(raw_address)
@@ -178,7 +192,7 @@ def classify_blocks(
             for code in observed_codes
             if code.isascii() and code.isalpha() and 2 <= len(code) <= 3
         }
-        if codes & ALLOWED_COUNTRIES:
+        if codes & allowed_countries:
             continue
         # GeoIP can occasionally return multiple observations; a stable joined
         # code preserves that evidence while keeping a deterministic grouping.
@@ -414,6 +428,20 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def configured_countries(config: dict[str, Any]) -> set[str]:
+    """Validate the Ansible-managed country allowlist before using it."""
+    values = config.get("allowed_countries", sorted(DEFAULT_ALLOWED_COUNTRIES))
+    if not isinstance(values, list):
+        raise BlockerError("allowed_countries must be a list")
+    countries = {str(value).upper() for value in values}
+    if not countries or any(
+        not country.isascii() or not country.isalpha() or len(country) != 2
+        for country in countries
+    ):
+        raise BlockerError("allowed_countries must contain two-letter ISO country codes")
+    return countries
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     """Serialize the hourly run, update persistence, then update live nftables."""
     args = parse_args(sys.argv[1:] if argv is None else argv)
@@ -439,7 +467,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         nft_binary = str(config.get("nft_binary", "/usr/sbin/nft"))
         destinations = query_destinations(config)
         protected_addresses = resolve_protected_addresses(config)
-        candidates = classify_blocks(destinations, protected_addresses)
+        candidates = classify_blocks(
+            destinations, protected_addresses, configured_countries(config)
+        )
         records = load_state(state_path)
         removed = remove_protected_records(records, protected_addresses)
         from datetime import datetime, timezone
