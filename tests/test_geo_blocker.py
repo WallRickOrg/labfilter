@@ -21,7 +21,7 @@ class GeoBlockPolicyTests(unittest.TestCase):
             "192.168.1.10": set(),
             "198.51.100.1": {"US"},
             "198.51.100.2": {"CA"},
-            "203.0.113.10": {"GB"},
+            "203.0.113.10": {"DE"},
             "2001:db8::10": {"DE"},
             "10.0.0.8": set(),
             "not-an-address": {"FR"},
@@ -30,7 +30,7 @@ class GeoBlockPolicyTests(unittest.TestCase):
         self.assertEqual(
             blocker.classify_blocks(destinations),
             {
-                "203.0.113.10": "GB",
+                "203.0.113.10": "DE",
                 "2001:db8::10": "DE",
                 "10.0.0.8": "UNKNOWN",
             },
@@ -81,15 +81,32 @@ class GeoBlockPolicyTests(unittest.TestCase):
     def test_render_groups_locations_and_adds_supported_comments(self):
         records = {
             "2001:db8::1": {"country": "DE", "added": "2026-10-02"},
-            "203.0.113.1": {"country": "GB", "added": "2026-10-01"},
+            "203.0.113.1": {"country": "DE", "added": "2026-10-01"},
         }
 
         rendered = blocker.render_elements(records, include_comments=True, flush_sets=False)
 
         self.assertIn("# Geolocation: DE", rendered)
-        self.assertIn("# Geolocation: GB", rendered)
         self.assertIn('2001:db8::1 comment "DE; added 2026-10-02"', rendered)
-        self.assertIn('203.0.113.1 comment "GB; added 2026-10-01"', rendered)
+        self.assertIn('203.0.113.1 comment "DE; added 2026-10-01"', rendered)
+
+    def test_default_safe_country_set_includes_five_eyes(self):
+        destinations = {
+            "203.0.113.1": {"AU"},
+            "203.0.113.2": {"GB"},
+            "203.0.113.3": {"NZ"},
+            "203.0.113.4": {"US"},
+        }
+
+        self.assertEqual(blocker.classify_blocks(destinations), {})
+
+    def test_country_allowlist_can_be_managed_by_configuration(self):
+        destinations = {"203.0.113.1": {"DE"}, "203.0.113.2": {"FR"}}
+
+        self.assertEqual(
+            blocker.classify_blocks(destinations, allowed_countries={"DE"}),
+            {"203.0.113.2": "FR"},
+        )
 
 
 if __name__ == "__main__":

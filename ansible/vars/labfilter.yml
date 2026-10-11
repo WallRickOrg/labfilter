@@ -59,8 +59,17 @@ labfilter_geo_block_request_timeout_seconds: 30
 labfilter_geo_block_state_directory: /var/lib/labfilter
 labfilter_geo_block_state_file: /var/lib/labfilter/geo-blocks.json
 labfilter_geo_block_include_file: /var/lib/labfilter/geo-block-elements.nft
+# These countries are the conservative Five Eyes baseline for this home lab.
+# Keep the list here, rather than in .env, so policy changes are reviewable.
+labfilter_geo_block_allowed_countries:
+  - AU
+  - CA
+  - GB
+  - NZ
+  - US
+
 # These destinations are resolved at each hourly run and excluded from the
-# non-CA/US deny set; no provider IP is hard-coded into the repository.
+# country-based deny set; no provider IP is hard-coded into the repository.
 labfilter_geo_block_protected_hostnames:
   - api.openai.com
   - auth.openai.com
@@ -68,3 +77,11 @@ labfilter_geo_block_protected_hostnames:
   - chat.openai.com
   - codex.openai.com
   - codex.com
+  - github.com
+  - ssh.github.com
+  - api.github.com
+  - raw.githubusercontent.com
+  - objects.githubusercontent.com
+  - codeload.github.com
+  - gist.githubusercontent.com
+  - ghcr.io
