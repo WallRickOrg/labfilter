@@ -31,6 +31,14 @@ labfilter_bridge_interfaces:
   - eth0
   - eth1
 
+# These source networks are management paths, not destinations to evaluate
+# against the country-based deny sets. Keep them ahead of every block rule.
+labfilter_bridge_always_allowed_ipv4:
+  - 192.168.86.0/24
+  - 100.64.0.0/10
+labfilter_bridge_always_allowed_ipv6:
+  - fd7a:115c:a1e0::/48
+
 # This fixed test policy follows the earlier Labfilter intent: the bridge
 # forwards normally except for a current controller-side DNS snapshot.
 # The current hostname is a test input; the event label describes the generic
