@@ -17,12 +17,18 @@ untrusted side ── eth0 ── br0 ── eth1 ── other side
 
 The bridge has no management address, route, gateway, or DHCP profile.
 
+The bridge policy always accepts source traffic from the local management
+network `192.168.86.0/24` and Tailscale's standard IPv4 (`100.64.0.0/10`) and
+IPv6 (`fd7a:115c:a1e0::/48`) ranges before evaluating destination deny sets.
+
 ## Packet filtering
 
 Ansible owns the `bridge`-family nftables table `labfilter` and its `forward`
 hook. The policy drops the controller-resolved fixed test destinations and the
 persistent IPv4/IPv6 sets learned by the hourly GeoIP job, then accepts all
-other transparent bridge traffic. Each deny chain logs a
+other transparent bridge traffic. The source-based management exceptions are
+evaluated first so destination filtering cannot cut off local or Tailscale
+administration. Each deny chain logs a
 rate-limited `LABFILTER_BLOCKED` prefix, then drops unconditionally; log
 rate-limiting can never turn a deny into an allow. The apply validates nftables
 syntax before replacing only this dedicated table, so unrelated firewall tables
