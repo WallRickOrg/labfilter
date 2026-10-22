@@ -42,6 +42,9 @@ DEFAULT_PROTECTED_HOSTNAMES = (
     "codeload.github.com",
     "gist.githubusercontent.com",
     "ghcr.io",
+    "auth.docker.io",
+    "registry-1.docker.io",
+    "index.docker.io",
 )
 DEFAULT_PROTECTED_HOSTNAME_SUFFIXES = (".docker.io",)
 

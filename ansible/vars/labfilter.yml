@@ -93,6 +93,14 @@ labfilter_geo_block_protected_hostnames:
   - codeload.github.com
   - gist.githubusercontent.com
   - ghcr.io
+  # Docker Hub authentication and registry endpoints must remain reachable
+  # even when their current CDN address is classified outside the allowlist.
+  # Keep the suffix protection below as the broad policy for observed Docker
+  # Hub hostnames; these exact names cover pulls when reverse-DNS enrichment
+  # is unavailable or stale.
+  - auth.docker.io
+  - registry-1.docker.io
+  - index.docker.io
 # Reverse-DNS names ending in these suffixes are removed from the learned
 # destination deny inventory, including newly added Docker Hub endpoints.
 labfilter_geo_block_protected_hostname_suffixes:

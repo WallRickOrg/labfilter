@@ -61,10 +61,12 @@ published Meta API ranges are useful for reference, but GitHub documents that
 they are not exhaustive for every service, so hostname protection is the
 managed policy here.
 
-The blocker also checks the indexed destination reverse-DNS hostname and
-protects `docker.io` plus every subdomain ending in `.docker.io`. This removes
-matching addresses from the persistent deny inventory on the next run, allowing
-Docker image registry and authentication endpoints to rotate normally.
+The blocker resolves Docker Hub authentication, registry, and index hostnames
+on every hourly run. It also checks the indexed destination reverse-DNS hostname
+and protects `docker.io` plus every subdomain ending in `.docker.io`. Matching
+addresses are removed from the persistent deny inventory during the same
+reconciliation, allowing Docker image pulls to continue while CDN addresses
+rotate normally.
 
 An Ansible-managed cron job runs at the start of every hour and uses a paginated
 Elasticsearch aggregation over the previous 12 hours of `labfilter-*` events.
