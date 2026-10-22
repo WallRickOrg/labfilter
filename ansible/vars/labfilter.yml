@@ -93,3 +93,7 @@ labfilter_geo_block_protected_hostnames:
   - codeload.github.com
   - gist.githubusercontent.com
   - ghcr.io
+# Reverse-DNS names ending in these suffixes are removed from the learned
+# destination deny inventory, including newly added Docker Hub endpoints.
+labfilter_geo_block_protected_hostname_suffixes:
+  - .docker.io

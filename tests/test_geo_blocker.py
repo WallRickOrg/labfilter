@@ -1,8 +1,10 @@
 """Focused policy tests for the Ansible-deployed GeoIP blocker."""
 
 import importlib.util
+import json
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 # Import the executable source directly so the deployed file remains standalone.
@@ -54,6 +56,42 @@ class GeoBlockPolicyTests(unittest.TestCase):
             blocker.ipaddress.ip_address("2001:db8::40"),
         }
         self.assertEqual(blocker.classify_blocks(destinations, protected), {})
+
+    def test_docker_hostname_suffix_protects_subdomains_only(self):
+        hostnames = {
+            "203.0.113.40": {"registry-1.docker.io"},
+            "203.0.113.41": {"docker.io"},
+            "203.0.113.42": {"not-docker.io"},
+        }
+
+        protected = blocker.protected_hostname_addresses(
+            hostnames, {"protected_hostname_suffixes": [".docker.io"]}
+        )
+
+        self.assertEqual(
+            protected,
+            {
+                blocker.ipaddress.ip_address("203.0.113.40"),
+                blocker.ipaddress.ip_address("203.0.113.41"),
+            },
+        )
+        self.assertTrue(blocker.hostname_matches_suffix("AUTH.DOCKER.IO.", ".docker.io"))
+        self.assertFalse(blocker.hostname_matches_suffix("not-docker.io", ".docker.io"))
+
+    def test_docker_hostname_protection_removes_learned_block(self):
+        destinations = {"203.0.113.40": {"DE"}}
+        protected = {
+            blocker.ipaddress.ip_address("203.0.113.40"),
+        }
+
+        self.assertEqual(
+            blocker.classify_blocks(
+                destinations,
+                allowed_countries={"AU", "CA", "GB", "NZ", "US"},
+                protected_hostname_addresses=protected,
+            ),
+            {},
+        )
 
     def test_protected_records_are_removed_for_live_set_reconciliation(self):
         records = {
@@ -107,6 +145,50 @@ class GeoBlockPolicyTests(unittest.TestCase):
             blocker.classify_blocks(destinations, allowed_countries={"DE"}),
             {"203.0.113.2": "FR"},
         )
+
+    def test_destination_query_nests_hostname_aggregation_under_composite(self):
+        captured = {}
+
+        class FakeResponse:
+            """Provide the minimal response interface used by json.load."""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "aggregations": {
+                            "destinations": {
+                                "buckets": [],
+                            }
+                        }
+                    }
+                ).encode("utf-8")
+
+        def fake_urlopen(http_request, timeout):
+            """Capture the request body without contacting Elasticsearch."""
+            captured["body"] = json.loads(http_request.data)
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        config = {
+            "elasticsearch_url": "http://example.invalid:9200",
+            "index_pattern": "labfilter-*",
+            "lookback_hours": 12,
+        }
+        with mock.patch.object(blocker.request, "urlopen", fake_urlopen):
+            destinations, hostnames = blocker.query_destinations(config)
+
+        composite = captured["body"]["aggs"]["destinations"]
+        self.assertIn("composite", composite)
+        self.assertIn("hostnames", composite["aggs"])
+        self.assertNotIn("hostnames", composite)
+        self.assertEqual(destinations, {})
+        self.assertEqual(hostnames, {})
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
   "include_file": {{ labfilter_geo_block_include_file | to_json }},
   "allowed_countries": {{ labfilter_geo_block_allowed_countries | to_json }},
   "protected_hostnames": {{ labfilter_geo_block_protected_hostnames | to_json }},
+  "protected_hostname_suffixes": {{ labfilter_geo_block_protected_hostname_suffixes | to_json }},
   "nft_binary": "/usr/sbin/nft",
   "lock_file": "/run/lock/labfilter-geo-blocker.lock"
 }

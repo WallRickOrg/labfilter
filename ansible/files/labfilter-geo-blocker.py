@@ -43,6 +43,7 @@ DEFAULT_PROTECTED_HOSTNAMES = (
     "gist.githubusercontent.com",
     "ghcr.io",
 )
+DEFAULT_PROTECTED_HOSTNAME_SUFFIXES = (".docker.io",)
 
 
 class BlockerError(RuntimeError):
@@ -60,8 +61,10 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
-    """Return unique destination IPs and their observed GeoIP country codes."""
+def query_destinations(
+    config: dict[str, Any],
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """Return destination country observations and indexed reverse hostnames."""
     base_url = str(config["elasticsearch_url"]).rstrip("/")
     index = parse.quote(str(config["index_pattern"]), safe="*,-_")
     lookback_hours = int(config["lookback_hours"])
@@ -72,6 +75,7 @@ def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
     )
     after_key: dict[str, Any] | None = None
     destinations: dict[str, set[str]] = {}
+    destination_hostnames: dict[str, set[str]] = {}
 
     while True:
         # Composite aggregation pages through every unique destination without
@@ -90,21 +94,30 @@ def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
                         {"range": {"@timestamp": {"gte": f"now-{lookback_hours}h", "lte": "now"}}},
                         {"exists": {"field": "destination.ip"}},
                     ]
-                }
-            },
-            "aggs": {
+ },
+ },
+ "aggs": {
                 "destinations": {
                     "composite": composite,
                     "aggs": {
-                        "countries": {
+                    "countries": {
                             "terms": {
                                 "field": "destination.geo.country_iso_code",
                                 "size": 16,
                             }
+ },
+ # Logstash stores reverse-DNS enrichment in this ECS field.
+                    # The keyword subfield keeps the aggregation compatible
+                    # with Elasticsearch's default dynamic string mapping.
+                    "hostnames": {
+                        "terms": {
+                            "field": "destination.hostname.keyword",
+                            "size": 64,
                         }
-                    },
-                }
-            },
+ },
+ },
+ },
+ }
         }
         http_request = request.Request(
             endpoint,
@@ -132,6 +145,10 @@ def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
                 if code.isascii() and code.isalpha() and 2 <= len(code) <= 3:
                     codes.add(code)
             destinations.setdefault(address, set()).update(codes)
+            for hostname in bucket.get("hostnames", {}).get("buckets", []):
+                value = str(hostname.get("key", "")).strip().lower().rstrip(".")
+                if value:
+                    destination_hostnames.setdefault(address, set()).add(value)
 
         next_after = aggregation.get("after_key")
         if not buckets or next_after is None:
@@ -140,7 +157,41 @@ def query_destinations(config: dict[str, Any]) -> dict[str, set[str]]:
             raise BlockerError("Elasticsearch composite aggregation did not advance")
         after_key = next_after
 
-    return destinations
+    return destinations, destination_hostnames
+
+
+def hostname_matches_suffix(hostname: str, suffix: str) -> bool:
+    """Match a hostname or subdomain without matching lookalike domains."""
+    normalized_hostname = hostname.strip().lower().rstrip(".")
+    normalized_suffix = suffix.strip().lower().lstrip(".").rstrip(".")
+    return bool(normalized_suffix) and (
+        normalized_hostname == normalized_suffix
+        or normalized_hostname.endswith(f".{normalized_suffix}")
+    )
+
+
+def protected_hostname_addresses(
+    destination_hostnames: dict[str, set[str]], config: dict[str, Any]
+) -> set[ipaddress._BaseAddress]:
+    """Return addresses whose indexed reverse names match protected suffixes."""
+    suffixes = config.get(
+        "protected_hostname_suffixes", DEFAULT_PROTECTED_HOSTNAME_SUFFIXES
+    )
+    if not isinstance(suffixes, list):
+        raise BlockerError("protected_hostname_suffixes must be a list")
+    protected: set[ipaddress._BaseAddress] = set()
+    for raw_address, hostnames in destination_hostnames.items():
+        try:
+            address = ipaddress.ip_address(raw_address)
+        except ValueError:
+            continue
+        if any(
+            hostname_matches_suffix(hostname, suffix)
+            for hostname in hostnames
+            for suffix in suffixes
+        ):
+            protected.add(address)
+    return protected
 
 
 def resolve_protected_addresses(config: dict[str, Any]) -> set[ipaddress._BaseAddress]:
@@ -170,10 +221,12 @@ def classify_blocks(
     destinations: dict[str, set[str]],
     protected_addresses: set[ipaddress._BaseAddress] | None = None,
     allowed_countries: set[str] | None = None,
+    protected_hostname_addresses: set[ipaddress._BaseAddress] | None = None,
 ) -> dict[str, str]:
     """Select canonical addresses that policy requires blocking, once each."""
     blocked: dict[str, str] = {}
     protected_addresses = protected_addresses or set()
+    protected_hostname_addresses = protected_hostname_addresses or set()
     allowed_countries = allowed_countries or DEFAULT_ALLOWED_COUNTRIES
     for raw_address, observed_codes in destinations.items():
         try:
@@ -183,7 +236,12 @@ def classify_blocks(
             continue
 
         comparable = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else address
-        if address in protected_addresses or comparable in protected_addresses:
+        if (
+            address in protected_addresses
+            or comparable in protected_addresses
+            or address in protected_hostname_addresses
+            or comparable in protected_hostname_addresses
+        ):
             continue
         if isinstance(comparable, ipaddress.IPv4Address) and comparable in LOCAL_IPV4_NETWORK:
             continue
@@ -465,8 +523,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         state_path = Path(str(config["state_file"]))
         include_path = Path(str(config["include_file"]))
         nft_binary = str(config.get("nft_binary", "/usr/sbin/nft"))
-        destinations = query_destinations(config)
+        destinations, destination_hostnames = query_destinations(config)
         protected_addresses = resolve_protected_addresses(config)
+        protected_addresses.update(
+            protected_hostname_addresses(destination_hostnames, config)
+        )
         candidates = classify_blocks(
             destinations, protected_addresses, configured_countries(config)
         )
