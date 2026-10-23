@@ -35,6 +35,9 @@ labfilter_bridge_interfaces:
 # against the country-based deny sets. Keep them ahead of every block rule.
 labfilter_bridge_always_allowed_ipv4:
   - 192.168.86.0/24
+  # The WireGuard client must be able to initiate traffic without being caught
+  # by fixed or learned destination deny sets on the transparent bridge.
+  - 192.168.2.9
   - 100.64.0.0/10
 labfilter_bridge_always_allowed_ipv6:
   - fd7a:115c:a1e0::/48
