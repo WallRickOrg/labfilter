@@ -8,6 +8,8 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 
 - Independent DHCP management Ethernet and Wi-Fi paths provide SSH access.
 - `br0` is an unnumbered transparent bridge made from `eth0` and `eth1`.
+- The WireGuard client at `192.168.2.9` is an explicitly trusted bridge source
+  and bypasses destination blocking.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
 - The bridge always accepts sources from `192.168.86.0/24` and the standard
   Tailscale IPv4/IPv6 ranges before destination deny sets.
