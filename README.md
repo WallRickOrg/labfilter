@@ -61,8 +61,9 @@ published Meta API ranges are useful for reference, but GitHub documents that
 they are not exhaustive for every service, so hostname protection is the
 managed policy here.
 
-The blocker resolves Docker Hub authentication, registry, and index hostnames
-on every hourly run. It also checks the indexed destination reverse-DNS hostname
+The blocker resolves configured service hostnames, including Docker Hub
+authentication/registry/index endpoints and the npm registry, on every hourly
+run. It also checks the indexed destination reverse-DNS hostname
 and protects `docker.io` plus every subdomain ending in `.docker.io`. Matching
 addresses are removed from the persistent deny inventory during the same
 reconciliation, allowing Docker image pulls to continue while CDN addresses

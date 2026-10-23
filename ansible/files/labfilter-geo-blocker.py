@@ -45,6 +45,7 @@ DEFAULT_PROTECTED_HOSTNAMES = (
     "auth.docker.io",
     "registry-1.docker.io",
     "index.docker.io",
+    "registry.npmjs.org",
 )
 DEFAULT_PROTECTED_HOSTNAME_SUFFIXES = (".docker.io",)
 

@@ -101,6 +101,7 @@ labfilter_geo_block_protected_hostnames:
   - auth.docker.io
   - registry-1.docker.io
   - index.docker.io
+  - registry.npmjs.org
 # Reverse-DNS names ending in these suffixes are removed from the learned
 # destination deny inventory, including newly added Docker Hub endpoints.
 labfilter_geo_block_protected_hostname_suffixes:
