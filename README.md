@@ -13,6 +13,8 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
 - Allowed traffic is logged with a global rate limit of 5 events per second
   with a burst of 20, while blocked traffic retains its separate log policy.
+- WireGuard client ICMP and UDP/51820 exception traffic is accepted without
+  generating allowed-traffic log events.
 - The bridge always accepts sources from `192.168.86.0/24` and the standard
   Tailscale IPv4/IPv6 ranges before destination deny sets.
 - Fixed and learned GeoIP deny policy logs dropped packets with
