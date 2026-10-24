@@ -47,15 +47,13 @@ table bridge labfilter {
 
     chain forward {
         type filter hook forward priority filter; policy accept;
-        # Log explicitly allowed exceptions before accepting them; the normal
-        # path logs after fixed and dynamic destination blocks are evaluated.
+        # Log management exceptions before accepting them; the normal path
+        # logs after fixed and dynamic destination blocks are evaluated.
         ip saddr @always_allowed_ipv4 jump log_forward
         ip saddr @always_allowed_ipv4 counter accept comment "Allow local and Tailscale IPv4 management"
         ip6 saddr @always_allowed_ipv6 jump log_forward
         ip6 saddr @always_allowed_ipv6 counter accept comment "Allow Tailscale IPv6 management"
-        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip protocol icmp jump log_forward
         ip saddr {{ labfilter_wireguard_client_ipv4 }} ip protocol icmp counter accept comment "Allow WireGuard client ICMP traffic"
-        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports jump log_forward
         ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter accept comment "Allow WireGuard client tunnel traffic"
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6
@@ -66,12 +64,29 @@ table bridge labfilter {
     }
 
     chain log_forward {
+        # ARP is required for local neighbor discovery but is not useful in
+        # the IP traffic telemetry stream.
+        ether type arp counter return comment "Exclude ARP traffic"
+        # STP/RSTP BPDUs use the IEEE 802.1D bridge-group destination MAC.
+        # They must continue crossing the transparent bridge but do not belong
+        # in the IP traffic telemetry stream.
+        ether daddr 01:80:c2:00:00:00 counter return comment "Exclude STP/RSTP traffic"
         # Kibana's browser/API port is excluded so the monitoring platform does
         # not recursively log its own UI traffic.
         tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
         tcp sport 5601 counter return comment "Exclude Kibana source traffic"
+        # WireGuard tunnel packets are intentionally excluded in both
+        # directions. The forward-chain allow rule covers client-originated
+        # handshakes, but replies use source port 51820 and otherwise reach
+        # this logger. Keep this exclusion here so it also covers accepted
+        # traffic in either direction without weakening block rules evaluated
+        # before log_forward.
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp sport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard source-port traffic"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard destination-port traffic"
+        ip daddr {{ labfilter_wireguard_client_ipv4 }} udp sport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard destination source-port traffic"
+        ip daddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard destination-port traffic"
         # Log accepted packets, then return to the parent chain without blocking.
-        log prefix "LABFILTER_TRAFFIC " counter return comment "Log accepted bridge traffic"
+        limit rate {{ labfilter_allowed_traffic_log_rate }} burst {{ labfilter_allowed_traffic_log_burst }} packets log prefix "LABFILTER_TRAFFIC " counter return comment "Rate-limited allowed bridge traffic"
     }
 
     chain block_ipv4 {

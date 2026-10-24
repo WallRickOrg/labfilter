@@ -45,6 +45,11 @@ labfilter_wireguard_client_ipv4: 192.168.2.9
 labfilter_wireguard_allowed_udp_ports:
   - 51820
 
+# Allowed traffic remains visible without indexing every packet from a busy
+# bridge. Blocked traffic keeps its separate, higher-rate logging policy.
+labfilter_allowed_traffic_log_rate: 5/second
+labfilter_allowed_traffic_log_burst: 20
+
 # This fixed test policy follows the earlier Labfilter intent: the bridge
 # forwards normally except for a current controller-side DNS snapshot.
 # The current hostname is a test input; the event label describes the generic
