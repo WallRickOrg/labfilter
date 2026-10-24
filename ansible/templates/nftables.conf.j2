@@ -64,6 +64,9 @@ table bridge labfilter {
     }
 
     chain log_forward {
+        # ARP is required for local neighbor discovery but is not useful in
+        # the IP traffic telemetry stream.
+        ether type arp counter return comment "Exclude ARP traffic"
         # Kibana's browser/API port is excluded so the monitoring platform does
         # not recursively log its own UI traffic.
         tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
