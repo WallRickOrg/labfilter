@@ -49,6 +49,7 @@ table bridge labfilter {
         type filter hook forward priority filter; policy accept;
         ip saddr @always_allowed_ipv4 counter accept comment "Allow local and Tailscale IPv4 management"
         ip6 saddr @always_allowed_ipv6 counter accept comment "Allow Tailscale IPv6 management"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip protocol icmp counter accept comment "Allow WireGuard client ICMP traffic"
         ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter accept comment "Allow WireGuard client tunnel traffic"
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6

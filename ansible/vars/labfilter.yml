@@ -39,8 +39,8 @@ labfilter_bridge_always_allowed_ipv4:
 labfilter_bridge_always_allowed_ipv6:
   - fd7a:115c:a1e0::/48
 
-# The WireGuard client gets a narrow exception for its tunnel handshake only.
-# Other traffic from this address remains subject to fixed and GeoIP blocks.
+# The WireGuard client gets narrow ICMP and tunnel-handshake exceptions only.
+# Other protocols from this address remain subject to fixed and GeoIP blocks.
 labfilter_wireguard_client_ipv4: 192.168.2.9
 labfilter_wireguard_allowed_udp_ports:
   - 51820
