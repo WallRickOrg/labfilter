@@ -67,6 +67,10 @@ table bridge labfilter {
         # ARP is required for local neighbor discovery but is not useful in
         # the IP traffic telemetry stream.
         ether type arp counter return comment "Exclude ARP traffic"
+        # STP/RSTP BPDUs use the IEEE 802.1D bridge-group destination MAC.
+        # They must continue crossing the transparent bridge but do not belong
+        # in the IP traffic telemetry stream.
+        ether daddr 01:80:c2:00:00:00 counter return comment "Exclude STP/RSTP traffic"
         # Kibana's browser/API port is excluded so the monitoring platform does
         # not recursively log its own UI traffic.
         tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
