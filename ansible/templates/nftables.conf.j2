@@ -47,8 +47,15 @@ table bridge labfilter {
 
     chain forward {
         type filter hook forward priority filter; policy accept;
+        # Log explicitly allowed exceptions before accepting them; the normal
+        # path logs after fixed and dynamic destination blocks are evaluated.
+        ip saddr @always_allowed_ipv4 jump log_forward
         ip saddr @always_allowed_ipv4 counter accept comment "Allow local and Tailscale IPv4 management"
+        ip6 saddr @always_allowed_ipv6 jump log_forward
         ip6 saddr @always_allowed_ipv6 counter accept comment "Allow Tailscale IPv6 management"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip protocol icmp jump log_forward
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip protocol icmp counter accept comment "Allow WireGuard client ICMP traffic"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports jump log_forward
         ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter accept comment "Allow WireGuard client tunnel traffic"
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6
