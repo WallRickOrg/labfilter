@@ -11,6 +11,8 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 - The WireGuard client at `192.168.2.9` has narrow ICMP and UDP/51820
   exceptions; other protocols from it remain subject to destination blocking.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
+- Allowed traffic is logged with a global rate limit of 5 events per second
+  with a burst of 20, while blocked traffic retains its separate log policy.
 - The bridge always accepts sources from `192.168.86.0/24` and the standard
   Tailscale IPv4/IPv6 ranges before destination deny sets.
 - Fixed and learned GeoIP deny policy logs dropped packets with

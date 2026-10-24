@@ -71,7 +71,7 @@ table bridge labfilter {
         tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
         tcp sport 5601 counter return comment "Exclude Kibana source traffic"
         # Log accepted packets, then return to the parent chain without blocking.
-        log prefix "LABFILTER_TRAFFIC " counter return comment "Log accepted bridge traffic"
+        limit rate {{ labfilter_allowed_traffic_log_rate }} burst {{ labfilter_allowed_traffic_log_burst }} packets log prefix "LABFILTER_TRAFFIC " counter return comment "Rate-limited allowed bridge traffic"
     }
 
     chain block_ipv4 {
