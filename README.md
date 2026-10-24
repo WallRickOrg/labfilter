@@ -8,6 +8,8 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 
 - Independent DHCP management Ethernet and Wi-Fi paths provide SSH access.
 - `br0` is an unnumbered transparent bridge made from `eth0` and `eth1`.
+- The WireGuard client at `192.168.2.9` has a narrow UDP/51820 tunnel exception;
+  other traffic from it remains subject to destination blocking.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
 - The bridge always accepts sources from `192.168.86.0/24` and the standard
   Tailscale IPv4/IPv6 ranges before destination deny sets.
@@ -60,6 +62,14 @@ learned matching addresses during the same nftables reconciliation. GitHub's
 published Meta API ranges are useful for reference, but GitHub documents that
 they are not exhaustive for every service, so hostname protection is the
 managed policy here.
+
+The blocker resolves configured service hostnames, including Docker Hub
+authentication/registry/index endpoints and the npm registry, on every hourly
+run. It also checks the indexed destination reverse-DNS hostname
+and protects `docker.io` plus every subdomain ending in `.docker.io`. Matching
+addresses are removed from the persistent deny inventory during the same
+reconciliation, allowing Docker image pulls to continue while CDN addresses
+rotate normally.
 
 An Ansible-managed cron job runs at the start of every hour and uses a paginated
 Elasticsearch aggregation over the previous 12 hours of `labfilter-*` events.

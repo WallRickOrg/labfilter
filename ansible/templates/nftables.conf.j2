@@ -19,6 +19,13 @@ table bridge labfilter {
         elements = { {{ labfilter_bridge_always_allowed_ipv6 | join(', ') }} }
     }
 
+    # Permit only the WireGuard client's tunnel port before country-based
+    # destination blocks; all other traffic from the client is evaluated below.
+    set wireguard_allowed_udp_ports {
+        type inet_service
+        elements = { {{ labfilter_wireguard_allowed_udp_ports | join(', ') }} }
+    }
+
     set blocked_ipv4 {
         type ipv4_addr
         elements = { {{ labfilter_block_ipv4 | join(', ') }} }
@@ -42,6 +49,7 @@ table bridge labfilter {
         type filter hook forward priority filter; policy accept;
         ip saddr @always_allowed_ipv4 counter accept comment "Allow local and Tailscale IPv4 management"
         ip6 saddr @always_allowed_ipv6 counter accept comment "Allow Tailscale IPv6 management"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter accept comment "Allow WireGuard client tunnel traffic"
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6
         ip daddr @geo_blocked_ipv4 jump block_geo_ipv4
