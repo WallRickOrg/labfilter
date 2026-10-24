@@ -68,6 +68,16 @@ table bridge labfilter {
         # not recursively log its own UI traffic.
         tcp dport 5601 counter return comment "Exclude Kibana destination traffic"
         tcp sport 5601 counter return comment "Exclude Kibana source traffic"
+        # WireGuard tunnel packets are intentionally excluded in both
+        # directions. The forward-chain allow rule covers client-originated
+        # handshakes, but replies use source port 51820 and otherwise reach
+        # this logger. Keep this exclusion here so it also covers accepted
+        # traffic in either direction without weakening block rules evaluated
+        # before log_forward.
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp sport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard source-port traffic"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard destination-port traffic"
+        ip daddr {{ labfilter_wireguard_client_ipv4 }} udp sport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard destination source-port traffic"
+        ip daddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter return comment "Exclude WireGuard destination-port traffic"
         # Log accepted packets, then return to the parent chain without blocking.
         limit rate {{ labfilter_allowed_traffic_log_rate }} burst {{ labfilter_allowed_traffic_log_burst }} packets log prefix "LABFILTER_TRAFFIC " counter return comment "Rate-limited allowed bridge traffic"
     }
