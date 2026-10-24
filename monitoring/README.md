@@ -76,6 +76,39 @@ docker compose build logstash
    `logstash-pipeline` named volume preserves the uploaded file when the
    container is recreated.
 
+## Repair a legacy traffic index mapping
+
+If Kibana Maps reports `Unsupported field type ... geo_point,geo_shape ...
+conflict` for the source or destination location, check the mappings before
+changing the dashboard. A concrete `labfilter-traffic` index created before
+the GeoIP template can map `source.geo.location` and
+`destination.geo.location` as generic objects, conflicting with the managed
+`geo_point` mapping.
+
+Stop Logstash, reindex the concrete traffic index into an index covered by the
+current template, verify the document count and geo mappings, then delete only
+the verified legacy index and recreate the `labfilter-traffic` write alias:
+
+```sh
+docker compose stop -t 30 logstash
+docker compose exec -T elasticsearch curl -fsS -X POST \
+  'http://localhost:9200/_reindex?wait_for_completion=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"source":{"index":"labfilter-traffic"},"dest":{"index":"labfilter-traffic-000001"}}'
+docker compose exec -T elasticsearch curl -fsS \
+  'http://localhost:9200/labfilter-traffic-000001/_mapping/field/source.geo.location,destination.geo.location?pretty'
+docker compose exec -T elasticsearch curl -fsS -X DELETE \
+  'http://localhost:9200/labfilter-traffic'
+docker compose exec -T elasticsearch curl -fsS -X POST \
+  'http://localhost:9200/_aliases' -H 'Content-Type: application/json' \
+  -d '{"actions":[{"add":{"index":"labfilter-traffic-000001","alias":"labfilter-traffic","is_write_index":true}}]}'
+./update-logstash.sh
+```
+
+Do not delete the legacy index until the reindexed document count and both
+location mappings have been verified. This migration preserves the traffic
+documents and does not modify Labfilter filtering.
+
 Kibana is available on the configured Docker-server management address at port
 5601. Elasticsearch must also be reachable from Labfilter's independent
 management path for the hourly destination aggregation. Restrict TCP/9200 at
