@@ -7,10 +7,11 @@ Labfilter's Ansible-managed rsyslog rule. Accepted traffic is indexed in
 traffic to or from port 5601 is excluded at the Labfilter logging chain so
 Kibana does not recursively monitor itself.
 
-New events are enriched with GeoLite2 City data into
-`source.geo.location` and `destination.geo.location`. The reproducible Kibana
-map and dashboard are in `kibana/`; deploy them with the named-container
-`docker cp` workflow documented there.
+New events are enriched with the pinned bundled GeoLite2 City database into
+`source.geo.location` and `destination.geo.location`. The explicit database
+path avoids relying on the runtime GeoIP database manager during pipeline
+startup. The reproducible Kibana map and dashboard are in `kibana/`; deploy
+them with the named-container `docker cp` workflow documented there.
 
 ## DNS enrichment
 
