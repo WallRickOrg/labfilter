@@ -20,6 +20,14 @@ The bridge has no management address, route, gateway, or DHCP profile.
 The bridge policy always accepts source traffic from the local management
 network `192.168.86.0/24` and Tailscale's standard IPv4 (`100.64.0.0/10`) and
 IPv6 (`fd7a:115c:a1e0::/48`) ranges before evaluating destination deny sets.
+The torrent host at `192.168.2.9` is deliberately narrower: ICMP, the
+WireGuard UDP/51820 outer flow, and local/Tailscale destinations are allowed,
+while direct public IPv4 egress is dropped. This keeps torrent traffic inside
+the VPN without attempting to inspect the encrypted tunnel payload.
+Independently, common BitTorrent ports `6881-6889` and `51413` are dropped in
+both TCP and UDP directions for all bridge sources before management
+exceptions. This port policy cannot identify torrent sessions using arbitrary
+ports or encrypted VPN payloads.
 
 ## Packet filtering
 

@@ -40,10 +40,22 @@ labfilter_bridge_always_allowed_ipv6:
   - fd7a:115c:a1e0::/48
 
 # The WireGuard client gets narrow ICMP and tunnel-handshake exceptions only.
-# Other protocols from this address remain subject to fixed and GeoIP blocks.
+# Direct public egress is denied below; local destinations remain available for
+# management and service access without weakening the VPN kill-switch boundary.
 labfilter_wireguard_client_ipv4: 192.168.2.9
 labfilter_wireguard_allowed_udp_ports:
   - 51820
+labfilter_wireguard_local_ipv4:
+  - 192.168.0.0/16
+  - 100.64.0.0/10
+
+# These are the conventional BitTorrent peer/tracker ports. The bridge policy
+# blocks them for every source and destination; arbitrary-port torrent traffic
+# still requires endpoint enforcement because nftables cannot classify it
+# reliably without inspecting encrypted application payloads.
+labfilter_torrent_blocked_ports:
+  - 6881-6889
+  - 51413
 
 # Allowed traffic remains visible without indexing every packet from a busy
 # bridge. Blocked traffic keeps its separate, higher-rate logging policy.
