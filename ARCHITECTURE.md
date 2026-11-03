@@ -68,7 +68,10 @@ Labfilter rsyslog ── management path/UDP ──> remote Logstash
 Labfilter Ansible installs only rsyslog and a filter that forwards matching
 kernel messages to the configured remote Logstash host. It does not install,
 start, or configure Docker or Compose. The stack definition, Logstash pipeline,
-and ILM bootstrap are in `monitoring/` and are operated on the Docker server.
+and ILM bootstrap are in the independent `/workspace/monitoring` project and are
+operated on the Docker server. The reusable project retains the `monitoring`
+Compose identity and persistent named volumes for Labfilter while allowing
+additional pipelines and dashboards.
 The Docker server's firewall must restrict UDP/5514 to Labfilter. Elasticsearch
 must be reachable over the independent management path for the scheduled
 query, but TCP/9200 must be restricted to Labfilter and trusted administrators.
