@@ -9,7 +9,12 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 - Independent DHCP management Ethernet and Wi-Fi paths provide SSH access.
 - `br0` is an unnumbered transparent bridge made from `eth0` and `eth1`.
 - The WireGuard client at `192.168.2.9` has narrow ICMP and UDP/51820
-  exceptions; other protocols from it remain subject to destination blocking.
+  exceptions. Its direct public egress is denied, while local-network traffic
+  remains available; torrent traffic therefore must use the VPN tunnel.
+- Common BitTorrent ports (`6881-6889` and `51413`) are blocked in both TCP and
+  UDP directions for every bridge source. This is a known-port safeguard, not
+  application identification; arbitrary-port or encrypted torrent sessions
+  require endpoint-level controls.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
 - Allowed traffic is logged with a global rate limit of 5 events per second
   with a burst of 20, while blocked traffic retains its separate log policy.
@@ -18,7 +23,9 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 - The bridge always accepts sources from `192.168.86.0/24` and the standard
   Tailscale IPv4/IPv6 ranges before destination deny sets.
 - Fixed and learned GeoIP deny policy logs dropped packets with
-  `LABFILTER_BLOCKED`; other bridge traffic is accepted and monitored.
+  `LABFILTER_BLOCKED`. The WireGuard client's direct public egress kill-switch
+  uses the same blocked-event path, while other bridge traffic is accepted and
+  monitored.
 
 ## Setup and discovery
 

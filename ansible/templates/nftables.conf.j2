@@ -26,6 +26,25 @@ table bridge labfilter {
         elements = { {{ labfilter_wireguard_allowed_udp_ports | join(', ') }} }
     }
 
+    # Keep the torrent host reachable on local and Tailscale networks while
+    # denying its direct public egress below. WireGuard's encrypted outer
+    # packets are allowed separately by tunnel port, so this does not disrupt
+    # traffic that is actually inside the VPN.
+    set wireguard_local_ipv4 {
+        type ipv4_addr
+        flags interval
+        elements = { {{ labfilter_wireguard_local_ipv4 | join(', ') }} }
+    }
+
+    # Apply this deny set before source-specific exceptions so conventional
+    # BitTorrent ports are blocked for every bridge participant. WireGuard's
+    # UDP/51820 tunnel is outside this set and remains available.
+    set torrent_blocked_ports {
+        type inet_service
+        flags interval
+        elements = { {{ labfilter_torrent_blocked_ports | join(', ') }} }
+    }
+
     set blocked_ipv4 {
         type ipv4_addr
         elements = { {{ labfilter_block_ipv4 | join(', ') }} }
@@ -47,6 +66,10 @@ table bridge labfilter {
 
     chain forward {
         type filter hook forward priority filter; policy accept;
+        tcp sport @torrent_blocked_ports jump block_torrent
+        tcp dport @torrent_blocked_ports jump block_torrent
+        udp sport @torrent_blocked_ports jump block_torrent
+        udp dport @torrent_blocked_ports jump block_torrent
         # Log management exceptions before accepting them; the normal path
         # logs after fixed and dynamic destination blocks are evaluated.
         ip saddr @always_allowed_ipv4 jump log_forward
@@ -55,10 +78,13 @@ table bridge labfilter {
         ip6 saddr @always_allowed_ipv6 counter accept comment "Allow Tailscale IPv6 management"
         ip saddr {{ labfilter_wireguard_client_ipv4 }} ip protocol icmp counter accept comment "Allow WireGuard client ICMP traffic"
         ip saddr {{ labfilter_wireguard_client_ipv4 }} udp dport @wireguard_allowed_udp_ports counter accept comment "Allow WireGuard client tunnel traffic"
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip daddr @wireguard_local_ipv4 jump log_forward
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip daddr @wireguard_local_ipv4 counter accept comment "Allow WireGuard client local traffic"
         ip daddr @blocked_ipv4 jump block_ipv4
         ip6 daddr @blocked_ipv6 jump block_ipv6
         ip daddr @geo_blocked_ipv4 jump block_geo_ipv4
         ip6 daddr @geo_blocked_ipv6 jump block_geo_ipv6
+        ip saddr {{ labfilter_wireguard_client_ipv4 }} ip daddr != @wireguard_local_ipv4 jump block_wireguard_direct_ipv4
         jump log_forward
         counter accept comment "Allow remaining transparent bridge traffic"
     }
@@ -111,6 +137,20 @@ table bridge labfilter {
         # Keeping address families separate makes nftables type validation explicit.
         limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
         counter drop comment "Automated GeoIP destination block IPv6"
+    }
+
+    chain block_wireguard_direct_ipv4 {
+        # This is the torrent host's egress kill-switch: only its WireGuard
+        # outer flow and local destinations may leave directly from this IP.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "Block direct public egress from VPN client"
+    }
+
+    chain block_torrent {
+        # Port matching is intentionally bounded and rate-limited; arbitrary
+        # ports and encrypted VPN payloads cannot be identified at this layer.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "Block common BitTorrent ports"
     }
 }
 
