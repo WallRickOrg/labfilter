@@ -48,6 +48,11 @@ DHCP client requests and server replies (`UDP/68→67` and `UDP/67→68`) are al
 explicitly accepted before destination filtering so broadcast address
 assignment can cross the transparent bridge.
 
+The repository includes `scripts/validate-torrent-block.sh` for a client-side
+check. It sends probes to the common BitTorrent ports and verifies the live
+`block_torrent` counter through Ansible; it is not a complete detector for
+arbitrary-port, encrypted, or VPN-encapsulated torrent traffic.
+
 The GeoIP job queries only aggregations of `destination.ip` and
 `destination.geo.country_iso_code` from the preceding 12 hours. Destinations in
 `192.168.0.0/16`, the US, or Canada are excluded. Other and unknown locations
