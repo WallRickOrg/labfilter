@@ -66,6 +66,16 @@ table bridge labfilter {
 
     chain forward {
         type filter hook forward priority filter; policy accept;
+        # DHCP client broadcasts and server replies use the fixed UDP port
+        # pair below; allow both directions before destination policy.
+        udp sport 68 udp dport 67 counter accept comment "Allow DHCP client requests"
+        udp sport 67 udp dport 68 counter accept comment "Allow DHCP server replies"
+        # DNS requests and replies must cross the transparent bridge before
+        # destination policy evaluation; permit both UDP and TCP DNS traffic.
+        udp sport 53 counter accept comment "Allow DNS replies"
+        udp dport 53 counter accept comment "Allow DNS queries"
+        tcp sport 53 counter accept comment "Allow TCP DNS replies"
+        tcp dport 53 counter accept comment "Allow TCP DNS queries"
         tcp sport @torrent_blocked_ports jump block_torrent
         tcp dport @torrent_blocked_ports jump block_torrent
         udp sport @torrent_blocked_ports jump block_torrent

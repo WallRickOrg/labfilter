@@ -41,6 +41,12 @@ rate-limited `LABFILTER_BLOCKED` prefix, then drops unconditionally; log
 rate-limiting can never turn a deny into an allow. The apply validates nftables
 syntax before replacing only this dedicated table, so unrelated firewall tables
 are not flushed.
+UDP and TCP port 53 are explicitly accepted in both directions before those
+destination deny sets so DNS clients on the bridge can receive queries and
+replies.
+DHCP client requests and server replies (`UDP/68→67` and `UDP/67→68`) are also
+explicitly accepted before destination filtering so broadcast address
+assignment can cross the transparent bridge.
 
 The GeoIP job queries only aggregations of `destination.ip` and
 `destination.geo.country_iso_code` from the preceding 12 hours. Destinations in

@@ -16,6 +16,10 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
   application identification; arbitrary-port or encrypted torrent sessions
   require endpoint-level controls.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
+- DHCP client requests (`UDP/68→67`) and server replies (`UDP/67→68`) are
+  explicitly allowed through the bridge before destination blocking.
+- DNS queries and replies using UDP or TCP port 53 are explicitly allowed
+  through the bridge before destination blocking.
 - Allowed traffic is logged with a global rate limit of 5 events per second
   with a burst of 20, while blocked traffic retains its separate log policy.
 - WireGuard client ICMP and UDP/51820 exception traffic is accepted without
