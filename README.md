@@ -99,7 +99,7 @@ events, to the local journal under the `labfilter-geo-blocker` tag.
 ## External ELK monitoring
 
 The Docker Compose stack runs on a separate Docker server. See
-[`monitoring/`](monitoring/) for the pinned Elastic images, persistent named
+[`../monitoring/`](../monitoring/) for the pinned Elastic images, persistent named
 volumes, Logstash pipeline, remote-listener environment sample, and weekly ILM
 bootstrap. Configure the Docker server firewall to permit UDP/5514 only from
 Labfilter.
@@ -111,5 +111,6 @@ Labfilter.
 - `ansible/files/labfilter-geo-blocker.py` — hourly Elasticsearch policy worker.
 - `ansible/templates/` — NetworkManager, nftables, cron, and rsyslog configuration.
 - `ansible/vars/labfilter.yml` — non-sensitive desired state.
-- `monitoring/` — external Docker-server Compose project.
+- `../monitoring/` — independent reusable monitoring project with the bundled
+  Labfilter integration and the existing `monitoring` Compose data identity.
 - `ARCHITECTURE.md` — packet path, monitoring path, and safety constraints.

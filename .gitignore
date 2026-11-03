@@ -13,8 +13,6 @@ ansible/group_vars/*.local.yml
 ansible/host_vars/*.local.yml
 ansible/vars/*.local.yml
 
-# The external monitoring server may keep its private Compose environment here.
-monitoring/.env
 # NetworkManager keyfiles can contain Wi-Fi credentials; keep local variants
 # and copied connection profiles out of Git.
 ansible/templates/**/*.local.j2
@@ -22,6 +20,8 @@ ansible/templates/**/*.local.j2
 
 # Keep private keys, temporary logs, and Ansible runtime files out of Git.
 .venv/
+# Python test imports create bytecode caches that are local build artifacts.
+__pycache__/
 *.pem
 *.key
 *.retry
