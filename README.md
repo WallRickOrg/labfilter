@@ -31,6 +31,18 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
   uses the same blocked-event path, while other bridge traffic is accepted and
   monitored.
 
+To validate the common BitTorrent-port deny from a client behind Labfilter,
+run the counter-based probe with a reachable IPv4 destination:
+
+```sh
+scripts/validate-torrent-block.sh --target-ip <reachable-ipv4>
+```
+
+The script requires `nc`, probes TCP and UDP ports `6881-6889` and `51413`, and
+checks that the live `block_torrent` nftables counter increases through the
+Ansible wrapper. It cannot identify arbitrary-port, encrypted, or
+VPN-encapsulated torrent traffic.
+
 ## Setup and discovery
 
 Copy `.env.example` to `.env`, fill local values, and never commit `.env`.
