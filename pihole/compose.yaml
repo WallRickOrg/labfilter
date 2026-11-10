@@ -1,0 +1,50 @@
+# Run this project on the separate Docker server, not on the inline Labfilter.
+services:
+  pihole:
+    # Pin the official release and immutable image digest for reproducible
+    # rebuilds; update both together after reviewing Pi-hole release notes.
+    image: ghcr.io/pi-hole/pihole:2026.10.1@sha256:30f803ad5dd60ff96cc0a63008a2e9271af481c1b0399a182192b2e91152c1f9
+    container_name: labfilter-pihole
+    hostname: pihole
+    environment:
+      TZ: "${PIHOLE_TZ:-Etc/UTC}"
+      # Pi-hole reads this Docker secret at startup; the secret is never
+      # committed to Git or placed in the Compose environment.
+      WEBPASSWORD_FILE: /run/secrets/pihole_web_password
+      # The macvlan gives Pi-hole its own LAN identity, so it must listen on
+      # all container interfaces rather than only Docker's default bridge.
+      FTLCONF_dns_listeningMode: ALL
+      FTLCONF_dns_upstreams: "${PIHOLE_UPSTREAM_DNS:-1.1.1.1;8.8.8.8}"
+    secrets:
+      - pihole_web_password
+    volumes:
+      # Persist Pi-hole's database, gravity data, and configuration in Docker
+      # managed storage on the external Docker server.
+      - pihole-etc:/etc/pihole
+    networks:
+      pihole_lan:
+        ipv4_address: "${PIHOLE_LAN_IP:?Set PIHOLE_LAN_IP in pihole/.env}"
+    expose:
+      - "53/tcp"
+      - "53/udp"
+      - "80/tcp"
+      - "443/tcp"
+    restart: unless-stopped
+
+secrets:
+  pihole_web_password:
+    file: ./secrets/pihole_web_password
+
+volumes:
+  pihole-etc:
+
+networks:
+  pihole_lan:
+    name: "${PIHOLE_NETWORK_NAME:-labfilter-pihole-lan}"
+    driver: macvlan
+    driver_opts:
+      parent: "${PIHOLE_LAN_PARENT:?Set PIHOLE_LAN_PARENT in pihole/.env}"
+    ipam:
+      config:
+        - subnet: "${PIHOLE_LAN_SUBNET:?Set PIHOLE_LAN_SUBNET in pihole/.env}"
+          gateway: "${PIHOLE_LAN_GATEWAY:?Set PIHOLE_LAN_GATEWAY in pihole/.env}"

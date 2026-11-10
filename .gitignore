@@ -22,6 +22,9 @@ ansible/templates/**/*.local.j2
 .venv/
 # Python test imports create bytecode caches that are local build artifacts.
 __pycache__/
+# Pi-hole deployment values and the Docker-managed web password stay local.
+pihole/.env
+pihole/secrets/pihole_web_password
 *.pem
 *.key
 *.retry
