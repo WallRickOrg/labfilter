@@ -129,4 +129,6 @@ Labfilter.
 - `ansible/vars/labfilter.yml` — non-sensitive desired state.
 - `../monitoring/` — independent reusable monitoring project with the bundled
   Labfilter integration and the existing `monitoring` Compose data identity.
+- `pihole/` — external Docker-server Pi-hole Compose project; its DNS firewall
+  enforcement is intentionally deferred until clients are migrated.
 - `ARCHITECTURE.md` — packet path, monitoring path, and safety constraints.
