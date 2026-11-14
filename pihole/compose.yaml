@@ -8,8 +8,8 @@ services:
     hostname: pihole
     environment:
       TZ: "${PIHOLE_TZ:-Etc/UTC}"
-      # Pi-hole reads this Docker secret at startup; the secret is never
-      # committed to Git or placed in the Compose environment.
+      # The repository helper materializes this Docker secret from the
+      # base64-encoded local .env value immediately before Compose runs.
       WEBPASSWORD_FILE: /run/secrets/pihole_web_password
       # The macvlan gives Pi-hole its own LAN identity, so it must listen on
       # all container interfaces rather than only Docker's default bridge.
@@ -40,11 +40,7 @@ volumes:
 
 networks:
   pihole_lan:
-    name: "${PIHOLE_NETWORK_NAME:-labfilter-pihole-lan}"
-    driver: macvlan
-    driver_opts:
-      parent: "${PIHOLE_LAN_PARENT:?Set PIHOLE_LAN_PARENT in pihole/.env}"
-    ipam:
-      config:
-        - subnet: "${PIHOLE_LAN_SUBNET:?Set PIHOLE_LAN_SUBNET in pihole/.env}"
-          gateway: "${PIHOLE_LAN_GATEWAY:?Set PIHOLE_LAN_GATEWAY in pihole/.env}"
+    # Reuse the Docker server's existing LAN macvlan. Docker rejects a second
+    # macvlan network with the same 192.168.2.0/24 pool.
+    name: "${PIHOLE_NETWORK_NAME:?Set PIHOLE_NETWORK_NAME in pihole/.env}"
+    external: true

@@ -11,35 +11,31 @@ device for the Pi-hole web interface at `https://<PIHOLE_LAN_IP>/admin`.
 
 ## Prepare the Docker server
 
-1. Reserve an unused LAN address for Pi-hole and identify the Docker host's
-   physical LAN parent interface.
-2. Copy the environment sample and fill in the LAN values:
+1. Reserve an unused LAN address for Pi-hole. This Compose project reuses the
+   existing Docker macvlan network; it must not create a second network with
+   the same LAN pool.
+2. Copy the environment sample and fill in the LAN values and password:
 
    ```sh
    cp .env.example .env
    ${EDITOR:-vi} .env
    ```
 
-3. Create the ignored web-password secret file:
+   Set `PIHOLE_NETWORK_NAME` to the existing macvlan network on the Docker
+   server and set `PIHOLE_WEBPASSWORD_BASE64` to the base64 encoding of the
+   Pi-hole web password. The password itself is never committed.
+
+3. Validate and start Pi-hole through the repository helper. It creates the
+   ignored Docker secret file from the encoded `.env` value before invoking
+   Compose:
 
    ```sh
-   mkdir -p secrets
-   umask 077
-   ${EDITOR:-vi} secrets/pihole_web_password
+   ./scripts/pihole-compose.sh config --quiet
+   ./scripts/pihole-compose.sh up -d
+   ./scripts/pihole-compose.sh ps
    ```
 
-   The file must contain only the Pi-hole web password. It is intentionally
-   ignored and is not part of the repository.
-
-4. Validate and start Pi-hole:
-
-   ```sh
-   docker compose -f compose.yaml config --quiet
-   docker compose -f compose.yaml up -d
-   docker compose -f compose.yaml ps
-   ```
-
-5. From another LAN device, open the Pi-hole web interface and configure the
+4. From another LAN device, open the Pi-hole web interface and configure the
    desired blocklists and local DNS records.
 
 ## Migration and deferred firewall policy
