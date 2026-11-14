@@ -1,0 +1,15 @@
+# Managed by Labfilter Ansible. Pi-hole uses this seed file during its
+# unattended native installation; the v6 installer migrates it into pihole.toml.
+PIHOLE_INTERFACE={{ labfilter_pihole_interface }}
+IPV4_ADDRESS={{ labfilter_pihole_address }}/24
+IPV6_ADDRESS=
+QUERY_LOGGING=true
+INSTALL_WEB_INTERFACE=true
+DNSMASQ_LISTENING=single
+PIHOLE_DNS_1={{ labfilter_pihole_upstreams[0] }}
+PIHOLE_DNS_2={{ labfilter_pihole_upstreams[1] }}
+DNS_FQDN_REQUIRED=true
+DNS_BOGUS_PRIV=true
+DNSSEC=false
+BLOCKING_ENABLED=true
+REV_SERVER=false

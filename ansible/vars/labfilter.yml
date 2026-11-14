@@ -23,6 +23,18 @@ labfilter_wifi_connection_name: labfilter-wifi
 labfilter_wifi_ssid: "{{ lookup('env', 'LABFILTER_WIFI_SSID') | default(lookup('env', 'LABFILTER_LANWIFI_SSID'), true) }}"
 labfilter_wifi_psk: "{{ (lookup('env', 'LABFILTER_WIFI_PSK_BASE64') | default(lookup('env', 'LABFILTER_LANWIFI_PSK_BASE64'), true)) | b64decode }}"
 
+# Pi-hole runs natively on the independent wired management path. It must not
+# bind to Wi-Fi or assign an address to the transparent bridge.
+labfilter_pihole_enabled: true
+labfilter_pihole_interface: "{{ labfilter_management_interface }}"
+labfilter_pihole_address: "{{ labfilter_management_address }}"
+labfilter_pihole_installer_url: "https://raw.githubusercontent.com/pi-hole/pi-hole/v6.6/automated%20install/basic-install.sh"
+labfilter_pihole_installer_sha256: "4627fc5209064039a3b2ee615119db93b2c9ca8f9d69dea7967b7fdf67df71c8"
+labfilter_pihole_upstreams:
+  - 1.1.1.1
+  - 8.8.8.8
+labfilter_pihole_webpassword_base64: "{{ lookup('env', 'LABFILTER_PIHOLE_WEBPASSWORD_BASE64') }}"
+
 # The approved transparent bridge uses a bridge-family nftables forward hook.
 # It remains separate from the management interface and carries no L3 address.
 labfilter_nftables_enabled: true

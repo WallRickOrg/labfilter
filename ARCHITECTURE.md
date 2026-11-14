@@ -29,6 +29,14 @@ both TCP and UDP directions for all bridge sources before management
 exceptions. This port policy cannot identify torrent sessions using arbitrary
 ports or encrypted VPN payloads.
 
+## Native Pi-hole service
+
+Pi-hole is installed natively on Labfilter through guarded Ansible and uses
+only the wired management interface `eth2` and its reserved DHCP address. It
+does not use Wi-Fi, add an address to `br0`, or install a Docker runtime on the
+inline bridge appliance. DNS and the web interface are restricted to the
+management address. The external Docker Compose Pi-hole deployment is retired.
+
 ## Packet filtering
 
 Ansible owns the `bridge`-family nftables table `labfilter` and its `forward`

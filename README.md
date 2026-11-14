@@ -7,6 +7,8 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 ## Current topology
 
 - Independent DHCP management Ethernet and Wi-Fi paths provide SSH access.
+- Native Pi-hole runs on the wired management interface through Ansible; it
+  does not use Wi-Fi or add an address to `br0`.
 - `br0` is an unnumbered transparent bridge made from `eth0` and `eth1`.
 - The WireGuard client at `192.168.2.9` has narrow ICMP and UDP/51820
   exceptions. Its direct public egress is denied, while local-network traffic
@@ -73,7 +75,13 @@ Network and filtering changes require all three safeguards:
 
 The playbook preserves the management path, validates nftables before reload,
 and verifies the active bridge policy afterward. It manages rsyslog only as the
-blocked-event forwarder; it does not install or run Docker/Compose.
+blocked-event forwarder and installs the pinned native Pi-hole release on the
+wired management path; it does not install or run Docker/Compose.
+
+The Pi-hole web password is read from `LABFILTER_PIHOLE_WEBPASSWORD_BASE64` in
+the ignored `.env`, decoded only during the guarded apply, and never stored in
+tracked files. The Pi-hole service is bound to the wired management address;
+the transparent bridge and Wi-Fi configuration are not changed by the install.
 
 Set `LABFILTER_ELASTICSEARCH_URL` in the ignored `.env` to an Elasticsearch URL
 reachable through Labfilter's independent management path. The external host
@@ -129,6 +137,4 @@ Labfilter.
 - `ansible/vars/labfilter.yml` — non-sensitive desired state.
 - `../monitoring/` — independent reusable monitoring project with the bundled
   Labfilter integration and the existing `monitoring` Compose data identity.
-- `pihole/` — external Docker-server Pi-hole Compose project; its DNS firewall
-  enforcement is intentionally deferred until clients are migrated.
 - `ARCHITECTURE.md` — packet path, monitoring path, and safety constraints.
