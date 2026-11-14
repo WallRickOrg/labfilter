@@ -25,9 +25,10 @@ device for the Pi-hole web interface at `https://<PIHOLE_LAN_IP>/admin`.
    server and set `PIHOLE_WEBPASSWORD_BASE64` to the base64 encoding of the
    Pi-hole web password. The password itself is never committed.
 
-3. Validate and start Pi-hole through the repository helper. It creates the
-   ignored Docker secret file from the encoded `.env` value before invoking
-   Compose:
+3. Validate and start Pi-hole through the repository helper. It decodes the
+   password only in the helper process and passes it to Compose as an
+   environment-backed Docker secret, which also works with a remote Docker
+   daemon:
 
    ```sh
    ./scripts/pihole-compose.sh config --quiet

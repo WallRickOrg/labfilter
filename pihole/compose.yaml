@@ -8,9 +8,9 @@ services:
     hostname: pihole
     environment:
       TZ: "${PIHOLE_TZ:-Etc/UTC}"
-      # The repository helper materializes this Docker secret from the
-      # base64-encoded local .env value immediately before Compose runs.
-      WEBPASSWORD_FILE: /run/secrets/pihole_web_password
+      # Compose receives this value only from the helper's process environment;
+      # the base64-encoded source remains in the ignored local .env.
+      WEBPASSWORD_FILE: pihole_web_password
       # The macvlan gives Pi-hole its own LAN identity, so it must listen on
       # all container interfaces rather than only Docker's default bridge.
       FTLCONF_dns_listeningMode: ALL
@@ -33,7 +33,10 @@ services:
 
 secrets:
   pihole_web_password:
-    file: ./secrets/pihole_web_password
+    # Environment-backed secrets work with a remote Docker daemon because
+    # Compose sends the value through the Docker API instead of mounting a
+    # client-side path on the daemon host.
+    environment: PIHOLE_WEBPASSWORD
 
 volumes:
   pihole-etc:
