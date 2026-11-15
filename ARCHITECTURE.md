@@ -49,9 +49,13 @@ rate-limited `LABFILTER_BLOCKED` prefix, then drops unconditionally; log
 rate-limiting can never turn a deny into an allow. The apply validates nftables
 syntax before replacing only this dedicated table, so unrelated firewall tables
 are not flushed.
-UDP and TCP port 53 are explicitly accepted in both directions before those
-destination deny sets so DNS clients on the bridge can receive queries and
-replies.
+DNS is explicitly allowlisted to the native Pi-hole address on the wired
+management interface. UDP and TCP queries addressed to Pi-hole, matching
+responses from Pi-hole, and Pi-hole's own upstream queries and responses are
+accepted. All other UDP/TCP port-53 traffic crossing the transparent bridge is
+logged and dropped. The upstream exceptions are required because the observed
+Pi-hole resolver traffic can cross the bridge forward hook with the configured
+management source address and an ephemeral source port.
 DHCP client requests and server replies (`UDP/68→67` and `UDP/67→68`) are also
 explicitly accepted before destination filtering so broadcast address
 assignment can cross the transparent bridge.

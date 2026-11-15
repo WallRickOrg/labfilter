@@ -179,13 +179,15 @@
       no_log: true
 
     - name: Set the native Pi-hole web password from the ignored environment
-      # Decode only for this task and suppress command output so the password
-      # never enters Ansible logs or tracked configuration.
+      # Pi-hole v6 persists its API/web password through the FTL config
+      # interface. Decode only for this task and suppress output so the
+      # password never enters Ansible logs or tracked configuration.
       ansible.builtin.command:
         argv:
-          - pihole
-          - setpassword
-          - "{{ labfilter_pihole_webpassword_base64 | b64decode }}"
+          - pihole-FTL
+          - --config
+          - webserver.api.password
+          - "{{ labfilter_pihole_webpassword }}"
       when: labfilter_pihole_enabled | bool
       no_log: true
 

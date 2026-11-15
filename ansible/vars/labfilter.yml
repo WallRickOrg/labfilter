@@ -33,7 +33,12 @@ labfilter_pihole_installer_sha256: "4627fc5209064039a3b2ee615119db93b2c9ca8f9d69
 labfilter_pihole_upstreams:
   - 1.1.1.1
   - 8.8.8.8
+# Passwords copied from shell commands are sometimes base64-encoded with a
+# trailing line ending. Remove only CR/LF terminators so the browser-entered
+# password matches the intended secret while the encoded value stays private.
 labfilter_pihole_webpassword_base64: "{{ lookup('env', 'LABFILTER_PIHOLE_WEBPASSWORD_BASE64') }}"
+labfilter_pihole_webpassword: >-
+  {{ labfilter_pihole_webpassword_base64 | b64decode | trim }}
 
 # The approved transparent bridge uses a bridge-family nftables forward hook.
 # It remains separate from the management interface and carries no L3 address.
