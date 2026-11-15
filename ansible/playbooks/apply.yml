@@ -35,11 +35,13 @@
           - "labfilter_wifi_psk | length > 0"
           - "labfilter_elk_logstash_host | length > 0"
           - "labfilter_elasticsearch_url | length > 0"
+          - "(not labfilter_pihole_enabled) or (labfilter_pihole_webpassword_base64 | length > 0)"
         fail_msg: >-
           LABFILTER_MANAGEMENT_ADDRESS, LABFILTER_MANAGEMENT_INTERFACE,
           LABFILTER_WIFI_INTERFACE, LABFILTER_WIFI_SSID,
-          LABFILTER_WIFI_PSK_BASE64, LABFILTER_ELK_LOGSTASH_HOST, and
-          LABFILTER_ELASTICSEARCH_URL must be set in the ignored .env.
+          LABFILTER_WIFI_PSK_BASE64, LABFILTER_ELK_LOGSTASH_HOST,
+          LABFILTER_ELASTICSEARCH_URL, and LABFILTER_PIHOLE_WEBPASSWORD_BASE64
+          must be set in the ignored .env.
       no_log: true
 
     - name: Confirm local management access before protected changes
@@ -100,6 +102,116 @@
         name: "{{ labfilter_packages }}"
         state: present
         update_cache: false
+
+    - name: Create the native Pi-hole configuration directory
+      # The installer treats setupVars.conf as the unattended-install seed;
+      # keeping it under Ansible control makes a rebuild deterministic.
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: labfilter_pihole_enabled | bool
+
+    - name: Seed the native Pi-hole unattended configuration
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/pihole/setupVars.conf.j2"
+        dest: /etc/pihole/setupVars.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: labfilter_pihole_enabled | bool
+
+    - name: Download the pinned official Pi-hole v6 installer
+      ansible.builtin.get_url:
+        url: "{{ labfilter_pihole_installer_url }}"
+        dest: /usr/local/src/pihole-basic-install-v6.6.sh
+        owner: root
+        group: root
+        mode: '0755'
+        checksum: "sha256:{{ labfilter_pihole_installer_sha256 }}"
+      when: labfilter_pihole_enabled | bool
+
+    - name: Detect whether native Pi-hole is installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/pihole
+      register: labfilter_pihole_binary
+      when: labfilter_pihole_enabled | bool
+
+    - name: Install native Pi-hole unattended on the wired management path
+      # Pi-hole's official installer is pinned above and receives the seeded
+      # setupVars.conf, so it never prompts or touches Wi-Fi/br0 profiles.
+      ansible.builtin.command:
+        argv:
+          - bash
+          - /usr/local/src/pihole-basic-install-v6.6.sh
+          - --unattended
+      when:
+        - labfilter_pihole_enabled | bool
+        - not labfilter_pihole_binary.stat.exists
+      register: labfilter_pihole_install
+      no_log: true
+
+    - name: Apply native Pi-hole DNS settings
+      # FTL's supported CLI writes the active v6 configuration without
+      # replacing unrelated web or gravity settings.
+      ansible.builtin.command:
+        argv:
+          - pihole-FTL
+          - --config
+          - "{{ item.key }}"
+          - "{{ item.value }}"
+      loop:
+        - key: dns.interface
+          value: "{{ labfilter_pihole_interface }}"
+        - key: dns.listeningMode
+          value: SINGLE
+        - key: dns.upstreams
+          value: "[ \"{{ labfilter_pihole_upstreams[0] }}\", \"{{ labfilter_pihole_upstreams[1] }}\" ]"
+        - key: dns.queryLogging
+          value: 'true'
+        - key: dns.blocking.active
+          value: 'true'
+        - key: webserver.port
+          value: "{{ labfilter_pihole_address }}:80,{{ labfilter_pihole_address }}:443s"
+      when: labfilter_pihole_enabled | bool
+      no_log: true
+
+    - name: Set the native Pi-hole web password from the ignored environment
+      # Pi-hole v6 persists its API/web password through the FTL config
+      # interface. Decode only for this task and suppress output so the
+      # password never enters Ansible logs or tracked configuration.
+      ansible.builtin.command:
+        argv:
+          - pihole-FTL
+          - --config
+          - webserver.api.password
+          - "{{ labfilter_pihole_webpassword }}"
+      when: labfilter_pihole_enabled | bool
+      no_log: true
+
+    - name: Enable and restart native Pi-hole FTL
+      ansible.builtin.systemd_service:
+        name: pihole-FTL
+        enabled: true
+        state: restarted
+      when:
+        - labfilter_pihole_enabled | bool
+        - not ansible_check_mode
+
+    - name: Verify native Pi-hole is listening on DNS and web ports
+      ansible.builtin.shell: >-
+        ss -lntup |
+        grep -E '(:53|:80|:443)'
+      args:
+        executable: /bin/sh
+      register: labfilter_pihole_listeners
+      changed_when: false
+      failed_when: labfilter_pihole_listeners.rc != 0
+      when:
+        - labfilter_pihole_enabled | bool
+        - not ansible_check_mode
 
     - name: Create the protected GeoIP blocker directories
       # Learned public addresses are policy state, not credentials, but only

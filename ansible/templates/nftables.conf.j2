@@ -70,12 +70,21 @@ table bridge labfilter {
         # pair below; allow both directions before destination policy.
         udp sport 68 udp dport 67 counter accept comment "Allow DHCP client requests"
         udp sport 67 udp dport 68 counter accept comment "Allow DHCP server replies"
-        # DNS requests and replies must cross the transparent bridge before
-        # destination policy evaluation; permit both UDP and TCP DNS traffic.
-        udp sport 53 counter accept comment "Allow DNS replies"
-        udp dport 53 counter accept comment "Allow DNS queries"
-        tcp sport 53 counter accept comment "Allow TCP DNS replies"
-        tcp dport 53 counter accept comment "Allow TCP DNS queries"
+        # DNS on the transparent bridge is allowlisted to the native Pi-hole
+        # service on the wired management address. All other DNS queries and
+        # replies are logged and dropped by block_dns below.
+        ip daddr {{ labfilter_pihole_address }} udp dport 53 counter accept comment "Allow UDP DNS queries to Pi-hole"
+        ip saddr {{ labfilter_pihole_address }} udp sport 53 counter accept comment "Allow UDP DNS replies from Pi-hole"
+        ip saddr {{ labfilter_pihole_address }} udp dport 53 counter accept comment "Allow Pi-hole UDP upstream queries"
+        ip daddr {{ labfilter_pihole_address }} udp sport 53 counter accept comment "Allow Pi-hole UDP upstream replies"
+        ip daddr {{ labfilter_pihole_address }} tcp dport 53 counter accept comment "Allow TCP DNS queries to Pi-hole"
+        ip saddr {{ labfilter_pihole_address }} tcp sport 53 counter accept comment "Allow TCP DNS replies from Pi-hole"
+        ip saddr {{ labfilter_pihole_address }} tcp dport 53 counter accept comment "Allow Pi-hole TCP upstream queries"
+        ip daddr {{ labfilter_pihole_address }} tcp sport 53 counter accept comment "Allow Pi-hole TCP upstream replies"
+        udp dport 53 jump block_dns
+        udp sport 53 jump block_dns
+        tcp dport 53 jump block_dns
+        tcp sport 53 jump block_dns
         tcp sport @torrent_blocked_ports jump block_torrent
         tcp dport @torrent_blocked_ports jump block_torrent
         udp sport @torrent_blocked_ports jump block_torrent
@@ -161,6 +170,13 @@ table bridge labfilter {
         # ports and encrypted VPN payloads cannot be identified at this layer.
         limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
         counter drop comment "Block common BitTorrent ports"
+    }
+
+    chain block_dns {
+        # DNS is permitted only to/from the native Pi-hole service above.
+        # Keep the log bounded while making unauthorized resolvers visible.
+        limit rate 30/second burst 100 packets log prefix "LABFILTER_BLOCKED "
+        counter drop comment "Block DNS except Pi-hole"
     }
 }
 

@@ -7,6 +7,8 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 ## Current topology
 
 - Independent DHCP management Ethernet and Wi-Fi paths provide SSH access.
+- Native Pi-hole runs on the wired management interface through Ansible; it
+  does not use Wi-Fi or add an address to `br0`.
 - `br0` is an unnumbered transparent bridge made from `eth0` and `eth1`.
 - The WireGuard client at `192.168.2.9` has narrow ICMP and UDP/51820
   exceptions. Its direct public egress is denied, while local-network traffic
@@ -18,8 +20,10 @@ stay in the ignored `.env`; secrets there must be base64 encoded.
 - nftables filters the bridge in the `bridge`-family `forward` hook.
 - DHCP client requests (`UDP/68→67`) and server replies (`UDP/67→68`) are
   explicitly allowed through the bridge before destination blocking.
-- DNS queries and replies using UDP or TCP port 53 are explicitly allowed
-  through the bridge before destination blocking.
+- DNS queries and replies using UDP or TCP port 53 are allowed through the
+  bridge only when addressed to/from the native Pi-hole management address,
+  including Pi-hole's own upstream queries and responses; all other DNS
+  traffic is logged and blocked.
 - Allowed traffic is logged with a global rate limit of 5 events per second
   with a burst of 20, while blocked traffic retains its separate log policy.
 - WireGuard client ICMP and UDP/51820 exception traffic is accepted without
@@ -73,7 +77,22 @@ Network and filtering changes require all three safeguards:
 
 The playbook preserves the management path, validates nftables before reload,
 and verifies the active bridge policy afterward. It manages rsyslog only as the
-blocked-event forwarder; it does not install or run Docker/Compose.
+blocked-event forwarder and installs the pinned native Pi-hole release on the
+wired management path; it does not install or run Docker/Compose.
+
+The Pi-hole web password is read from `LABFILTER_PIHOLE_WEBPASSWORD_BASE64` in
+the ignored `.env`, decoded only during the guarded apply, and never stored in
+tracked files. The Pi-hole service is bound to the wired management address;
+the transparent bridge and Wi-Fi configuration are not changed by the install.
+
+To repair only the Pi-hole credential without touching nftables or network
+configuration, run the dedicated guarded playbook:
+
+```sh
+./scripts/ansible.sh .venv/bin/ansible-playbook \
+  ansible/playbooks/set-pihole-password.yml \
+  -e labfilter_password_apply_confirmed=true
+```
 
 Set `LABFILTER_ELASTICSEARCH_URL` in the ignored `.env` to an Elasticsearch URL
 reachable through Labfilter's independent management path. The external host
